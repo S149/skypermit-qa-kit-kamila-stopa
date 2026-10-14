@@ -24,7 +24,7 @@
 | 1 | Product | Pilot currency or aircraft weight band is persisted instead of computed at read time, causing staleness after the input field is corrected (01, Derived, never stored) | TBD | TBD | TBD | Correct `certified_on` / `mtom_grams`, re-read |
 | 2 | Product | Correcting a registered mass does not recalculate the band immediately, or already issued authorisations are revisited (01, Derived, never stored) | TBD | TBD | TBD | Correct mass; check band and existing approvals |
 | 3 | Product | `AuditLog` has an update or delete path in the API or UI (01, AuditLog) | TBD | TBD | TBD | Attempt update/delete through every available path |
-| 4 | Product | A state transition has no `AuditLog` row, or a creation event has a non-null `from_state` (01, AuditLog) | TBD | TBD | TBD | Check log entries for creation and each transition |
+| 4 | Product | A state transition has no `AuditLog` row, or `from_state` is not nullable so creation events cannot be recorded (01, AuditLog) | TBD | TBD | TBD | Check log entries for creation and each transition |
 | 5 | Product | `flight_purpose` over 2,000 characters accepted by the API or the DB; doc requires both layers to enforce it (01, Time handling) | TBD | TBD | TBD | Test at the limit via API and directly in DB |
 | 6 | Product | `window_end` not after `window_start` accepted (01, FlightRequest) | TBD | TBD | TBD | Equal and earlier `window_end` |
 | 7 | Product | Windows not stored in UTC, or curfew conversion done at write time instead of inside the `TIME_WINDOW` gate (01, Time handling) | TBD | TBD | TBD | Inspect stored values; check curfew handling at evaluation |

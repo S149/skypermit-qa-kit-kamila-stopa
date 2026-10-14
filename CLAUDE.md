@@ -25,18 +25,19 @@ All product behavior comes from `../skypermit/docs/`. Read it before writing any
 
 ## Test case format
 
-Every test case must contain:
+Test cases are atomic: one action or condition, one expected result. One file per case at `test-cases/{module}/{ID}.md` (file name = ID), created from the skill's template `.claude/skills/test-case-creator/templates/test-case.md` by the `test-case-creator` skill.
 
-- **ID** (unique, e.g. `TC-<FEATURE>-001`)
-- **Title**
-- **Preconditions**
-- **Steps** (numbered)
-- **Expected result**
-- **Priority** (e.g. High / Medium / Low)
+- **ID:** `{LAYER}-{ROLE}-{MODULE}-{NNN}`, e.g. `API-OP-FREQ-001`; `NNN` is counted per module
+- **Required fields:** ID, Title, Doc ref, Priority (High / Medium / Low), Preconditions, Steps (1-3), Expected result, Rationale
+- **Optional fields:** Test data, Actual result, Dependencies / environment, Postconditions
+
+Layer, role and module codes, numbering rules and the priority rule are documented in `.claude/skills/test-case-creator/SKILL.md`.
 
 ## Language
 
 All documentation in this repo (test cases, test plans, bug reports, checklists, skills, and any other written artifacts) must be written in **English**. The user may chat in Ukrainian; reply to the user in Ukrainian, but write every file in English.
+
+One exception: the `description` of a skill may include Ukrainian trigger phrases (e.g. "тест-кейс", "тест-план") so the skill activates on Ukrainian requests. Everything else in a skill, including its instructions, stays in English.
 
 ## Restrictions
 

@@ -1,5 +1,5 @@
 ---
-name: test-plan
+name: test-plan-creator
 description: Generate a concise ISO/IEC/IEEE 29119-3-style test plan (Markdown, English; about one page for a single feature, longer for a whole application) from a documentation file or directory such as ../skypermit/docs/. Use whenever the user asks for a test plan, "тест-план", a testing plan for a feature or release, or wants to plan testing from docs, even if they don't name the standard.
 ---
 
@@ -15,7 +15,7 @@ Turn a documentation file or directory into a compact test plan saved to `test-p
 ## Process
 
 1. Read every file in the given path. Treat it as the only source of truth: the plan must not claim behavior, risks, roles, dates or numbers that the docs do not support. Never write to `../skypermit`.
-2. Draft the plan using the structure below. Take stakeholders and roles from what the docs name; where the docs give no data (schedule, estimates, environments, other roles, approver), write `TBD` rather than guessing.
+2. Read the reference plan `examples/request-lifecycle.md` (in this skill's directory) for shape and level of detail, then draft the plan from the template `templates/test-plan.md` (in this skill's directory) using the structure below. Take stakeholders and roles from what the docs name; where the docs give no data (schedule, estimates, environments, other roles, approver), write `TBD` rather than guessing.
 3. Save to `test-plans/<feature-name>.md` (create the folder if needed; if the file exists, ask before overwriting).
 4. In the chat reply (in Ukrainian), give the file path and the list of open questions.
 
@@ -28,7 +28,12 @@ Turn a documentation file or directory into a compact test plan saved to `test-p
 
 ## Structure
 
-Start from `assets/test-plan-template.md` (blank template; copy it and fill it in). Read `references/examples.md` for full example plans in this repo and good/bad snippets. The block below is the same structure in short form.
+Start from `templates/test-plan.md` (in this skill's directory; blank template, copy it and fill it in). Then read the references in `examples/`:
+
+- `examples/request-lifecycle.md`: a complete reference plan; match its shape and level of detail.
+- `examples/snippets.md`: good and bad risk, stakeholder and open-question snippets.
+
+Examples are fixed references: update them only when this skill's format or rules change, not when a working plan in `test-plans/` is edited. The block below is the same structure in short form.
 
 ```markdown
 # Test Plan: <Feature name>

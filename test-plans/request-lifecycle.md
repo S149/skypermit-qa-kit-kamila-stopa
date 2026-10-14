@@ -5,7 +5,7 @@
 ## 1. Context
 - **Test items:** `FlightRequest` state transitions (submit, approve, reject, complete, cancel) and `409` handling for any `(from, action)` pair not in the transition table (02).
 - **Scope:** In: the 7 states, legal transitions, terminal states, cancellation deadline, schedule-overlap visibility by state, `failing_gate` / `rejection_reason` on gate-failure rejection, `ReviewAction` row on `approve`. Out: gate rule details (06), API payload shapes (03), UI (04).
-- **Assumptions & constraints:** 02 is the only source used here; behavior owned by other docs is not covered.
+- **Assumptions & constraints:** 02 is the only source used here; behavior owned by other docs is not covered. The cancellation deadline and overlap rule are restated in 02 and owned by 06 §5 and §1.4.
 - **Stakeholders:** Operators (submit, cancel), Reviewers (approve, reject), maintenance (complete) (02); other roles TBD.
 
 ## 2. Test strategy
@@ -22,13 +22,13 @@
 | # | Type | Risk (with doc ref) | Probability | Impact | Score | Mitigation |
 |---|---|---|---|---|---|---|
 | 1 | Product | A pair not in the transition table is accepted instead of `409`, including "harmless-looking" ones such as `submit` from `UNDER_REVIEW` (02, intro and table) | TBD | TBD | TBD | Illegal-pair matrix |
-| 2 | Product | Terminal states (`REJECTED`, `CANCELLED`, `COMPLETED`) accept any further action (02, States) | TBD | TBD | TBD | Try every action from each terminal state |
-| 3 | Product | `APPROVED` request is cancellable closer than 2 h before `window_start` (02, Rules elsewhere; source 06 §5) | TBD | TBD | TBD | Cases on both sides of the limit |
+| 2 | Product | Terminal states (`REJECTED`, `CANCELLED`, `COMPLETED`) accept any further action (02, States and table) | TBD | TBD | TBD | Try every action from each terminal state |
+| 3 | Product | `APPROVED` request is cancellable closer than 2 h before `window_start`, or the refusal is not `409` (02, Rules elsewhere; source 06 §5) | TBD | TBD | TBD | Cases on both sides of the limit |
 | 4 | Product | `submit` fails on overlap although `validate` passed, because another request for the same aircraft was approved in between; only `APPROVED` and `UNDER_REVIEW` count (02, Rules elsewhere) | TBD | TBD | TBD | Interleaved requests; check visibility per state |
 | 5 | Product | `SUBMITTED` observed at rest, or `COMPLETED` set from elapsed time instead of the maintenance endpoint (02, States) | TBD | TBD | TBD | Inspect state after submit and after time passes |
 | 6 | Product | `approve` / `reject` allowed without reviewer identity (`X-Reviewer-Id`), `reject` accepted without `note`, or no `ReviewAction` row on `approve` (02, table) | TBD | TBD | TBD | Negative cases per reviewer action |
 | 7 | Product | `REJECTED` after a gate failure without `failing_gate` and `rejection_reason` populated (02, table and States) | TBD | TBD | TBD | Reject by each gate; check both fields |
-| 8 | Product | A state write bypasses the transition check or audit log write, which the doc says must not be possible on any path (02, Implementation note) | TBD | TBD | TBD | Verify an audit entry exists for every transition |
+| 8 | Product | A state write bypasses the legal-transition check or the audit log write because it is not routed through one place (02, Implementation note) | TBD | TBD | TBD | Verify an audit entry exists for every transition |
 
 ## 5. Roles, schedule & estimates
 | Role | Responsibility |
@@ -47,7 +47,7 @@
 
 ## Open questions
 1. Cancel from `SUBMITTED` is "only reachable in the narrow window" yet callers never observe `SUBMITTED` at rest: how can it be tested?
-2. Is the 2-hour limit inclusive, and in which time zone is it measured?
+2. Is the 2-hour limit inclusive, and in which time zone is it measured? (02 says "up to 2 hours before `window_start`".)
 3. How is the maintenance `complete` endpoint reached and authorised for testing?
 4. Which gate owns the overlap check: "AIRCRAFT / TIME_WINDOW" (02) or only `TIME_WINDOW` (06 §1.4)?
 5. Test environment, roles, schedule and estimates?

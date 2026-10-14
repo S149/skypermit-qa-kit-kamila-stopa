@@ -1,12 +1,12 @@
-# Test plan examples
+# Test plan snippets
 
-Reference for the `test-plan` skill. Read it when drafting a plan.
+Reference for the `test-plan-creator` skill. Read it when drafting a plan; the complete reference plan is `request-lifecycle.md` in this folder.
 
-## Full examples in this repo
+## Other plans in this repo (for scope and size)
 
 | Scope | File | Notes |
 |---|---|---|
-| One feature, one doc | `test-plans/request-lifecycle.md` | Compact, about one page; risks from the transition table |
+| One feature, one doc | `test-plans/request-lifecycle.md` | Compact, about one page; risks from the transition table (fixed reference copy in this folder) |
 | One doc, several entities | `test-plans/data-model.md` | Constraints and derived values |
 | Whole application | `test-plans/skypermit-application.md` | Several pages; many risks; stakeholders gathered from all docs |
 

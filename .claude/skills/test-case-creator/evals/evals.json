@@ -1,0 +1,23 @@
+{
+  "skill_name": "test-case-creator",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Напиши тест-кейс: reviewer відхиляє запит (reject) без поля note",
+      "expected_output": "One atomic case in test-cases/review/ with ID API-RV-REVW-001 (next free number in an empty folder), all required fields, Doc ref to the sections that say a note is required (02-state-machine.md table, 01-data-model.md ReviewAction, 03-api-contract.md reject endpoint). The expected status code for a missing note is not defined in the docs, so the case must either ask the user or mark it TBD (not invent a code). Priority Medium (the rule is stated but the docs define no failure status, which stays TBD). Rationale cites the matching risk in test-plans/request-lifecycle.md (risk 6). No role names that the docs do not use. English text, nothing changed in ../skypermit.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "need a test case for aircraft registration with mass above 30000 g, should be refused",
+      "expected_output": "One atomic case in test-cases/aircraft/ with ID API-OP-ACFT-001, Doc ref to 06-business-rules.md section 3 (and section 1.2), expected result 422 at the /aircraft write before any gate, Priority High, steps 1-3, uses the rule_reference OH-1 section 3 from the 06 section 6 table (n/a failing_gate for registration) instead of marking the whole body TBD, Rationale cites risk 10 in test-plans/skypermit-application.md, no invented field names.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "створи тест-кейс на весь флоу: оператор реєструється, додає пілота, літак, створює запит, сабмітить і ревьюер апрувить",
+      "expected_output": "The skill does not write a single end-to-end scenario. It explains that this is a scenario, lists the separate atomic cases it would split into (one line each) and asks which one to create first (or suggests using a different artifact). No file is created without the user's choice.",
+      "files": []
+    }
+  ]
+}
