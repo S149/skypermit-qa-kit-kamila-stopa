@@ -4,19 +4,19 @@
     {
       "id": 1,
       "prompt": "Зроби тест-план для API з ../skypermit/docs/03-api-contract.md",
-      "expected_output": "One-page English plan in test-plans/api-contract.md covering endpoints from the doc, risk table with 1-5 scores, TBD for missing data, author Kamila Stopa, open questions at the end.",
+      "expected_output": "English plan in test-plans/api-contract.md covering endpoints from the doc (16 numbered plus login/logout/me and list extensions, no double-counted /operators), risks with doc refs and Probability/Impact/Score TBD, stakeholders only as named in the docs, TBD for missing data, author from git user.name or the user, open questions at the end.",
       "files": []
     },
     {
       "id": 2,
       "prompt": "need a test plan for the business rules / gates stuff, docs are in ../skypermit/docs - 06-business-rules.md mostly, but check 05-open-questions and 07-clarifications too, they might change things",
-      "expected_output": "Plan based on 06 with open questions and clarifications reflected as risks/open questions, no invented rules, one page.",
+      "expected_output": "English plan based on 06 where 07 and 05 are reflected (weight band under AIRCRAFT, open SUSPENDED and zone-active citation), every risk traceable to a doc statement, no invented rules or roles, Probability/Impact/Score TBD.",
       "files": []
     },
     {
       "id": 3,
       "prompt": "Склади тест-план на весь пакет документації ../skypermit/docs/ - одна сторінка, цілий реліз skypermit",
-      "expected_output": "Release-level one-page plan in English from all 8 docs, stays within ~600 words, no fabricated schedule/roles (TBD), notes contradictions or open questions from docs.",
+      "expected_output": "English release-level plan from all 8 docs that respects the explicit one-page request (concise, says what was left out), no fabricated schedule/roles/approver (TBD), stakeholders only as named in the docs, notes contradictions or open questions from the docs.",
       "files": []
     }
   ]
