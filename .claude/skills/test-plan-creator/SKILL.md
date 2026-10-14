@@ -10,7 +10,7 @@ Turn a documentation file or directory into a compact test plan saved to `test-p
 ## Inputs
 
 - A path to a doc file or directory (e.g. `../skypermit/docs/02-state-machine.md`). If none is given, ask for it.
-- Optional feature name. Otherwise derive a short kebab-case name from the doc content.
+- Optional feature name. Otherwise derive a short kebab-case name from the doc file name without its number prefix (`03-api-contract.md` → `api-contract`); for a whole directory use the application name (e.g. `skypermit-application`). The Version/date field is today's date.
 
 ## Process
 
@@ -22,7 +22,7 @@ Turn a documentation file or directory into a compact test plan saved to `test-p
 ## Output rules
 
 - Language of the plan: English. Chat with the user: Ukrainian.
-- **Size scales with scope.** A single feature or one doc: aim for about one page (roughly 400-600 words as a guide, not a limit). A whole application or several docs: the plan may run to several pages, since it has to cover more areas and risks. Either way stay concise: tables and bullets, not paragraphs, no padding. If the user explicitly asks for a length (e.g. "one page"), follow that and say what was left out.
+- **Size scales with scope.** A single feature or one doc: aim for about one page (roughly 400-600 words as a guide, not a limit). A whole application or several docs: the plan may run to several pages, since it has to cover more areas and risks. Either way stay concise: tables and bullets, not paragraphs, no padding. If the user explicitly asks for a length (e.g. "one page"), follow that and say what was left out: when the risks do not fit, keep the ones the docs flag most directly (conflicts and open questions first), merge related ones, and state in the plan how many risks or topics were omitted.
 - Follow the order and logic of ISO/IEC/IEEE 29119-3 (Context → Strategy → Activities/Estimates → Staffing → Schedule → Risks → Approval) in condensed form. Do not quote the standard; only follow its structure.
 - Cite the source doc for every scope item or rule where practical (e.g. `(02-state-machine.md)`) so reviewers can trace it.
 
@@ -44,7 +44,7 @@ Examples are fixed references: update them only when this skill's format or rule
 - **Test items:** ...
 - **Scope:** In: ... / Out: ...
 - **Assumptions & constraints:** ...
-- **Stakeholders:** list every role or party the docs actually name (with doc ref), then `TBD` for the rest (e.g. "Rules owner (07); API contract owner (05); Operators, Reviewers (04); others TBD")
+- **Stakeholders:** list every role or party the docs actually name (with doc ref), then `TBD` for the rest (format only, e.g. "<party> (<doc>); <party> (<doc>); others TBD"; list only parties the docs in scope actually name)
 
 ## 2. Test strategy
 - **Manual vs automated:** manual: ...; automation: TBD (not started unless requested)
@@ -78,8 +78,8 @@ Examples are fixed references: update them only when this skill's format or rule
 - **Author:** use the person the user names. If none is named, use `git config user.name`; if that is empty too, ask. Do not hardcode a name. Use the same name for the QA role in section 5.
 - **Probability, Impact and Score are `TBD` by default.** They are a judgement call that the docs do not make, so leave them for the team to fill in (Score = Probability x Impact once both are set). Fill a number only when the docs explicitly state it. Order risks by how directly the docs flag them (documented conflicts and open questions first).
 - Derive product risks from the docs (complex rules, state transitions, integrations, documented open questions). Project risks (staffing, deadlines, environment) are `TBD` unless documented.
-- If the docs contain their own open questions or contradictions, surface them in Open questions and reflect them as risks instead of resolving them yourself.
-- **Stakeholders, roles and approvers: use what the docs name, `TBD` for the rest.** Collect every party the docs mention (user roles such as operators and reviewers, owners of rules or contracts, admins, maintenance, issuing bodies) and cite where each appears. Use the doc's own wording; do not rename them or assign titles the docs never use (e.g. "QA lead", "product owner"). Anything the docs do not name stays `TBD`. Naming a stakeholder does not make them the approver: the approver is `TBD` unless the docs say who signs off.
-- **Count carefully.** Count endpoints, states, rules etc. from the numbered/tabular source, and do not double-count aliases (e.g. an endpoint listed both in an auth table and in the numbered registry). If unsure, say "see <doc>" instead of giving a number.
+- If the docs contain their own open questions or contradictions, surface them in Open questions and reflect them as risks instead of resolving them yourself. When several docs disagree, state which doc claims to govern only if a doc says so explicitly (e.g. a clarifications doc that says it overrides another); otherwise list the conflicting statements with refs and do not pick a winner.
+- **Stakeholders, roles and approvers: use what the docs name, `TBD` for the rest.** Collect every party the docs mention (user roles such as operators and reviewers, owners of rules or contracts, admins, maintenance, issuing bodies) and cite where each appears. Use the doc's own wording; do not rename them or assign titles the docs never use (e.g. "QA lead", "product owner"). Anything the docs do not name stays `TBD`. Naming a stakeholder does not make them the approver: the approver is `TBD` unless the docs say who signs off. A role that is only implied (e.g. "whoever owns the API contract") or an actor that appears only inside an action (e.g. "admin action") is not a named party: mark it as implied with the doc ref, or leave it `TBD`.
+- **Count carefully.** Count endpoints, states, rules etc. from the numbered/tabular source, and do not double-count aliases (e.g. an endpoint listed both in an auth table and in the numbered registry). If the source mixes numbered and unnumbered items (e.g. a numbered endpoint registry plus auth endpoints outside it), report them separately ("N numbered + M unnumbered") rather than one total. If unsure, say "see <doc>" instead of giving a number.
 - **Risks: no cap on count, but each must be accurate.** Include every risk the docs actually support, and none they don't. A risk is valid only if it traces to a specific doc statement (a rule, conflict, open question, or documented limitation) and you cite it (`02 §Rules`, `05 #4`). Check that the wording matches the doc: do not generalise, rename, or infer a failure mode the doc doesn't imply. Merge duplicates; if a risk is only your guess, leave it out or move it to Open questions.
 - **Keep it concise, without a strict word limit.** Details belong to test cases, so avoid lists of individual boundary values (name the technique and the doc instead) and keep sections to a few items. Never cut an accurate, doc-backed point just to save words; cut padding and speculation instead.

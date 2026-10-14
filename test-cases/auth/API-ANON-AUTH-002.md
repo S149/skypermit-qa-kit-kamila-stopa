@@ -2,7 +2,7 @@
 
 - **ID:** API-ANON-AUTH-002
 - **Title:** Operator login with valid credentials opens a session for that operator
-- **Doc ref:** `03-api-contract.md, Authentication & authorisation (`POST /auth/login`, `GET /auth/me`)`; `04-frontend-spec.md, Operator portal (Login and register pages)`
+- **Doc ref:** `03-api-contract.md`, Authentication & authorisation (`POST /auth/login`, `GET /auth/me`); `04-frontend-spec.md`, Operator portal (Login and register pages)
 - **Priority:** Medium
 
 ## Preconditions
@@ -31,4 +31,4 @@
 - None stated in the docs.
 
 ## Rationale
-Covers the rule that an operator logs in with email and password and that the session set by login identifies that operator (`/auth/me`). Corresponds to risk 1 in `test-plans/operator-authentication.md`.
+Covers the rule that an operator logs in with email and password and that the session set by login identifies that operator (`/auth/me`). No matching risk was found in `test-plans/`.

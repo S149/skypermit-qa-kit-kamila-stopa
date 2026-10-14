@@ -5,8 +5,8 @@
 ## 1. Context
 - **Test items:** <what is tested, with doc refs>
 - **Scope:** In: <...> / Out: <...>
-- **Assumptions & constraints:** <doc precedence, missing source documents, ...>
-- **Stakeholders:** <parties named in the docs, with doc refs>; other roles TBD
+- **Assumptions & constraints:** <doc precedence only if a doc states it, missing source documents, risks or topics omitted to fit a requested length, ...>
+- **Stakeholders:** <parties named in the docs, with doc refs; implied roles or actors that appear only inside an action are not listed>; other roles TBD
 
 ## 2. Test strategy
 - **Manual vs automated:** manual; automation TBD (not started unless requested)

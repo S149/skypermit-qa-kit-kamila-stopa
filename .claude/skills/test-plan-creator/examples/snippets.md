@@ -31,7 +31,13 @@ Bad (generic, no doc ref, invented scores):
 Good:
 
 ```markdown
-- **Stakeholders:** Operators and Reviewers (04); rules owner (07); API contract owner (05 §1); other roles TBD.
+- **Stakeholders:** Operators and Reviewers (04); rules owner (07); other roles TBD.
+```
+
+Bad (implied owner promoted to a role):
+
+```markdown
+- **Stakeholders:** API contract owner (05 §1), admin (03).
 ```
 
 Bad (titles the docs never use):

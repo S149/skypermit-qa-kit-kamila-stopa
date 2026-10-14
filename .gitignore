@@ -1,3 +1,18 @@
 # Personal Claude Code files
 .claude/settings.local.json
 CLAUDE.local.md
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Secrets
+.env
+.env.*
+
+# Future automation output
+node_modules/
+playwright-report/
+test-results/

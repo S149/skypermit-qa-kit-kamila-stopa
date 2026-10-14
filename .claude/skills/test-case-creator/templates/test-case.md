@@ -2,11 +2,11 @@
 
 - **ID:** {LAYER}-{ROLE}-{MODULE}-{NNN}
 - **Title:** {short title: action and expectation}
-- **Doc ref:** {file and section in ../skypermit/docs/, e.g. `02-state-machine.md, Cancellation deadline`}
+- **Doc ref:** {file and section in ../skypermit/docs/, file name in backticks, e.g. `02-state-machine.md`, Cancellation deadline; several refs separated by `;`}
 - **Priority:** {High | Medium | Low}
 
 ## Preconditions
-- {state of the system and actors before the test}
+- {state of the system and actors before the test; cite the doc by file name and section, not by number alone}
 
 ## Test data (optional)
 - {concrete inputs; delete this section if none}
@@ -17,7 +17,7 @@
 3. {optional third action}
 
 ## Expected result
-{one concrete, verifiable result}
+{one concrete, verifiable result; name the values to compare with the test data; state a status code or body only if the docs define it, otherwise list it as TBD under Dependencies}
 
 ## Actual result (optional)
 <!-- Leave empty. Filled in during execution. -->
@@ -29,4 +29,4 @@
 - {only if the docs state them}
 
 ## Rationale
-{why this test exists: the requirement or risk it covers; reference the risk in test-plans/ when one exists}
+{why this test exists: the requirement or risk it covers; cite the risk in test-plans/ by file and number when one exists; otherwise say that no matching risk was found}

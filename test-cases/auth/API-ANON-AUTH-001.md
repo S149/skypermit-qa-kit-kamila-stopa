@@ -2,12 +2,12 @@
 
 - **ID:** API-ANON-AUTH-001
 - **Title:** Operator registration creates the operator and signs the caller in
-- **Doc ref:** `03-api-contract.md, Authentication & authorisation (`POST /operators`, `GET /auth/me`)`; `04-frontend-spec.md, Operator portal (Login and register pages)`
+- **Doc ref:** `03-api-contract.md`, Authentication & authorisation (`POST /operators`, `GET /auth/me`); `04-frontend-spec.md`, Operator portal (Login and register pages)
 - **Priority:** Medium
 
 ## Preconditions
 - The caller has no session and sends no `X-Reviewer-Id` header.
-- No operator exists with the `email` or `national_id` used below (both are unique, 01).
+- No operator exists with the `email` or `national_id` used below (both are unique, per `01-data-model.md`, Operator).
 
 ## Test data (optional)
 - Auth credentials: `email` (unused), `password`.
@@ -18,7 +18,7 @@
 2. Send `GET /api/v1/auth/me` with the session cookie returned by step 1.
 
 ## Expected result
-`GET /api/v1/auth/me` returns the profile of the operator registered in step 1.
+`GET /api/v1/auth/me` returns the profile of the operator registered in step 1, i.e. its `email` and `national_id` equal the values from the test data.
 
 ## Actual result (optional)
 <!-- Leave empty. Filled in during execution. -->

@@ -6,7 +6,7 @@
 - **Test items:** `FlightRequest` state transitions (submit, approve, reject, complete, cancel) and `409` handling for any `(from, action)` pair not in the transition table (02).
 - **Scope:** In: the 7 states, legal transitions, terminal states, cancellation deadline, schedule-overlap visibility by state, `failing_gate` / `rejection_reason` on gate-failure rejection, `ReviewAction` row on `approve`. Out: gate rule details (06), API payload shapes (03), UI (04).
 - **Assumptions & constraints:** 02 is the only source used here; behavior owned by other docs is not covered. The cancellation deadline and overlap rule are restated in 02 and owned by 06 §5 and §1.4.
-- **Stakeholders:** Operators (submit, cancel), Reviewers (approve, reject), maintenance (complete) (02); other roles TBD.
+- **Stakeholders:** Operators (submit, cancel), Reviewers (approve, reject) (02); "maintenance" appears only as an endpoint that completes a request (02), so it is not listed as a party; other roles TBD.
 
 ## 2. Test strategy
 - **Manual vs automated:** manual; automation TBD (not started unless requested).

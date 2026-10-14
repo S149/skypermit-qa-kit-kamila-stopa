@@ -70,7 +70,7 @@ All fields are in `templates/test-case.md` (in this skill's directory). Required
 |---|---|
 | ID | per format above; equals the file name |
 | Title | short, states action and expectation; the first line of the file is `# {ID}: {Title}` with exactly this Title |
-| Doc ref | doc file and section the requirement comes from. Use the section number when the doc has one (`06-business-rules.md, §1.2`), otherwise the exact heading as written in the doc; do not invent section names. Several refs allowed |
+| Doc ref | doc file and section the requirement comes from. Use the section number when the doc has one (`06-business-rules.md`, §1.2; put only the file name in backticks, never nest backticks around endpoint names inside a ref), otherwise the exact heading as written in the doc; do not invent section names. Several refs allowed |
 | Priority | `High` / `Medium` / `Low`, see below |
 | Preconditions | state of the system and actors before the test |
 | Test data (optional) | concrete inputs, including every variable the Steps use (e.g. the request `{id}` and its state, the `X-Reviewer-Id` value); omit only if the Steps use none |
