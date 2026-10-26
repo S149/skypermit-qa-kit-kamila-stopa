@@ -1,4 +1,18 @@
 {
+  "hooks": {
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/usage-report.mjs"],
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  },
   "permissions": {
     "deny": [
       "Edit(../skypermit/**)",
