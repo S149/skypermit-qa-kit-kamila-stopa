@@ -40,3 +40,4 @@ The operator is created with `authorisation_level` = `L1`, not `L3` (registratio
 - [OPEN QUESTION: whether `phone`, `address_line`, `city` and `postal_code` are required in the registration request is not stated]
 - [OPEN QUESTION: no concrete example values for the request fields are given in the documentation]
 - [OPEN QUESTION: whether an `authorisation_level` sent in the request body is ignored or the request is rejected is not stated; the documentation states only that registration always creates the operator at `L1`]
+- [OPEN QUESTION: whether the operator profile returned by `GET /auth/me` includes `authorisation_level` is not stated ("The logged-in operator's profile"); if it does not, the value has to be read another way, for example `GET /operators/{id}` (self) or the database]

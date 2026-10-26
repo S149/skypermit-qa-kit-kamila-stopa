@@ -42,3 +42,4 @@ The new operator exists with `authorisation_level` = `L1` (least privilege). The
 - [OPEN QUESTION: whether `phone`, `address_line`, `city` and `postal_code` are required in the registration request is not stated]
 - [OPEN QUESTION: no concrete example values for the request fields are given in the documentation]
 - [OPEN QUESTION: the success HTTP status code and the response body of `POST /operators` are not stated, so it is not stated whether `authorisation_level` is returned in the response itself]
+- [OPEN QUESTION: whether the operator profile returned by `GET /auth/me` includes `authorisation_level` is not stated ("The logged-in operator's profile"); if it does not, the value has to be read another way, for example `GET /operators/{id}` (self) or the database]

@@ -70,7 +70,7 @@ Mark every gap with `[OPEN QUESTION: what needs to be clarified]`, in the place 
 
 ## Output
 
-Use this structure:
+Use the template `templates/test-case.md` (in this skill's directory) as the base for every case: copy it and replace each `{placeholder}`. The structure it holds is:
 
 ```
 # TC-{ROLE}-{NNN}: <Title>
@@ -91,6 +91,8 @@ Use this structure:
 ## Expected Result
 ## Open Questions
 ```
+
+A filled-in reference case is in `examples/TC-OP-013.md` (in this skill's directory). Use it to match the level of detail, the wording of Preconditions, Test Data, Steps and Expected Result, and the way gaps are marked as `[OPEN QUESTION: ...]`. Take the structure and style from it, never its values or its requirement: every fact in a new case comes from the documentation.
 
 ## Verification
 
