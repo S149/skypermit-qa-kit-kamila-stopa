@@ -64,25 +64,25 @@ Verify that the lifecycle behaves as the documentation states:
 
 ### In Scope
 
-- The seven states and their meaning (G1, G2)
-- Legal transitions and their actors (G3)
-- The `409` rule for every other transition (G4)
-- The cancellation deadline for `APPROVED` requests (G5)
-- The effect of request states on the overlap check (G6)
-- The single place for state writes and the database trigger (G7)
+- S1. The seven states and their meaning (G1, G2)
+- S2. Legal transitions and their actors (G3)
+- S3. The `409` rule for every other transition (G4)
+- S4. The cancellation deadline for `APPROVED` requests (G5)
+- S5. The effect of request states on the overlap check (G6)
+- S6. The single place for state writes and the database trigger (G7)
 
 ### Out Of Scope
 
-- The source text of the cancellation deadline rule: `02-state-machine.md` (section "Rules that affect the state machine but live elsewhere") cites `docs/06-business-rules.md` §5 (`TSD-4 §6`) as its source. That document is not part of the input.
+- O1. The source text of the cancellation deadline rule: `02-state-machine.md` (section "Rules that affect the state machine but live elsewhere") cites `docs/06-business-rules.md` §5 (`TSD-4 §6`) as its source. That document is not part of the input.
 
 ## Entry Criteria / Environments
 
 ### Entry Criteria
 
-1. Requirements, test goals are clear for testers
-2. All test environments and test tools are ready and can be used
-3. Test data / test documentation are available and can be used
-4. Test cases are ready and can be used
+- EN1. Requirements, test goals are clear for testers
+- EN2. All test environments and test tools are ready and can be used
+- EN3. Test data / test documentation are available and can be used
+- EN4. Test cases are ready and can be used
 
 ### Environments
 
@@ -93,9 +93,9 @@ Verify that the lifecycle behaves as the documentation states:
 
 ### Exit Criteria
 
-1. Test time was finished
-2. More than 85% of all test cases were passed
-3. Test Report is ready and can be provided to stakeholders
+- EX1. Test time was finished
+- EX2. More than 85% of all test cases were passed
+- EX3. Test Report is ready and can be provided to stakeholders
 
 ### Tools
 

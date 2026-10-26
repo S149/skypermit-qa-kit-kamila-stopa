@@ -94,26 +94,26 @@ Verify that the schema and the system behaviour match the data model:
 
 ### In Scope
 
-- The seven entities, their fields, keys, uniqueness and foreign keys (G1-G8)
-- Enumerations and their values (G9)
-- Derived, never stored values (G10)
-- Time handling (G11)
-- Schema and document sync with `supabase/migrations/0001`-`0004` (G1.4)
+- S1. The seven entities, their fields, keys, uniqueness and foreign keys (G1-G8)
+- S2. Enumerations and their values (G9)
+- S3. Derived, never stored values (G10)
+- S4. Time handling (G11)
+- S5. Schema and document sync with `supabase/migrations/0001`-`0004` (G1.4)
 
 ### Out Of Scope
 
-- Operator login and authorisation behaviour: `01-data-model.md` (entity `Operator`) hands it to `docs/03-api-contract.md`, section "Authentication & authorisation". That document is not part of the input.
-- The values of the pilot currency threshold and the weight band thresholds, and the meaning of the `C0`-`C3` taxonomy: `01-data-model.md` (sections "Derived, never stored" and entity `Zone`) hands them to `docs/06-business-rules.md` §2-§3. That document is not part of the input.
-- The values of `FlightRequest.state`: `01-data-model.md` (entity `FlightRequest`, field `state`) hands them to `02-state-machine.md`. That document is not part of the input.
+- O1. Operator login and authorisation behaviour: `01-data-model.md` (entity `Operator`) hands it to `docs/03-api-contract.md`, section "Authentication & authorisation". That document is not part of the input.
+- O2. The values of the pilot currency threshold and the weight band thresholds, and the meaning of the `C0`-`C3` taxonomy: `01-data-model.md` (sections "Derived, never stored" and entity `Zone`) hands them to `docs/06-business-rules.md` §2-§3. That document is not part of the input.
+- O3. The values of `FlightRequest.state`: `01-data-model.md` (entity `FlightRequest`, field `state`) hands them to `02-state-machine.md`. That document is not part of the input.
 
 ## Entry Criteria / Environments
 
 ### Entry Criteria
 
-1. Requirements, test goals are clear for testers
-2. All test environments and test tools are ready and can be used
-3. Test data / test documentation are available and can be used
-4. Test cases are ready and can be used
+- EN1. Requirements, test goals are clear for testers
+- EN2. All test environments and test tools are ready and can be used
+- EN3. Test data / test documentation are available and can be used
+- EN4. Test cases are ready and can be used
 
 ### Environments
 
@@ -124,9 +124,9 @@ Verify that the schema and the system behaviour match the data model:
 
 ### Exit Criteria
 
-1. Test time was finished
-2. More than 85% of all test cases were passed
-3. Test Report is ready and can be provided to stakeholders
+- EX1. Test time was finished
+- EX2. More than 85% of all test cases were passed
+- EX3. Test Report is ready and can be provided to stakeholders
 
 ### Tools
 

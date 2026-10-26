@@ -121,23 +121,23 @@ Verify that the diagrams render and that the behaviour they describe is correct.
 
 ### In Scope
 
-- Rendering and content of the ER, state and sequence diagrams (G1, G3-G26)
-- Entity fields, keys, uniqueness, enums and constraints shown in the ER diagram (G4-G10)
-- State transitions, terminal states and the `409` rule for undrawn transitions (G11-G19)
-- Gate pipeline order and the differing outcomes of `submit` and `validate` (G20-G25)
+- S1. Rendering and content of the ER, state and sequence diagrams (G1, G3-G26)
+- S2. Entity fields, keys, uniqueness, enums and constraints shown in the ER diagram (G4-G10)
+- S3. State transitions, terminal states and the `409` rule for undrawn transitions (G11-G19)
+- S4. Gate pipeline order and the differing outcomes of `submit` and `validate` (G20-G25)
 
 ### Out Of Scope
 
-- The authoritative data model and state machine: `08-uml-diagrams.md` (intro) says `01-data-model.md` and `02-state-machine.md` are the source of truth. Those documents are not part of the input.
+- O1. The authoritative data model and state machine: `08-uml-diagrams.md` (intro) says `01-data-model.md` and `02-state-machine.md` are the source of truth. Those documents are not part of the input.
 
 ## Entry Criteria / Environments
 
 ### Entry Criteria
 
-1. Requirements, test goals are clear for testers
-2. All test environments and test tools are ready and can be used
-3. Test data / test documentation are available and can be used
-4. Test cases are ready and can be used
+- EN1. Requirements, test goals are clear for testers
+- EN2. All test environments and test tools are ready and can be used
+- EN3. Test data / test documentation are available and can be used
+- EN4. Test cases are ready and can be used
 
 ### Environments
 
@@ -148,9 +148,9 @@ Verify that the diagrams render and that the behaviour they describe is correct.
 
 ### Exit Criteria
 
-1. Test time was finished
-2. More than 85% of all test cases were passed
-3. Test Report is ready and can be provided to stakeholders
+- EX1. Test time was finished
+- EX2. More than 85% of all test cases were passed
+- EX3. Test Report is ready and can be provided to stakeholders
 
 ### Tools
 

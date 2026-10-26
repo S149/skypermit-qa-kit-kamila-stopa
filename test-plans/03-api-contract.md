@@ -112,27 +112,27 @@ Verify that the API behaves as the contract states:
 
 ### In Scope
 
-- The authentication endpoints and the identity model (G2, G3, G6)
-- Server-derived enforcement and reviewer-or-owner reads (G4, G5)
-- Registry, extension, reference-data, flight-request and reviewer endpoints (G7-G12)
-- Error semantics and the `422` body (G13, G14)
-- Gate pipeline order and sharing (G15, G11)
+- S1. The authentication endpoints and the identity model (G2, G3, G6)
+- S2. Server-derived enforcement and reviewer-or-owner reads (G4, G5)
+- S3. Registry, extension, reference-data, flight-request and reviewer endpoints (G7-G12)
+- S4. Error semantics and the `422` body (G13, G14)
+- S5. Gate pipeline order and sharing (G15, G11)
 
 ### Out Of Scope
 
-- The gate rules themselves: `03-api-contract.md` (section "Gate pipeline") says they are fully specified in `docs/06-business-rules.md` as corrected by `docs/07-clarifications.md`. Those documents are not part of the input.
-- The behaviour of a `SUSPENDED` operator: `03-api-contract.md` (section "Gate pipeline", last paragraph, and "Error semantics") hands it to `docs/05-open-questions.md` §1. That document is not part of the input.
-- The full explanation of why the weight-band check belongs to `AIRCRAFT`: `03-api-contract.md` (section "Gate pipeline") hands it to the "gate implementation status" section of `CLAUDE.md`. That file is not part of the input.
-- Management of zone reference data: `03-api-contract.md` (section "Reference data") hands it to `supabase/seed.sql` and `supabase/SETUP.md`. Those files are not part of the input.
+- O1. The gate rules themselves: `03-api-contract.md` (section "Gate pipeline") says they are fully specified in `docs/06-business-rules.md` as corrected by `docs/07-clarifications.md`. Those documents are not part of the input.
+- O2. The behaviour of a `SUSPENDED` operator: `03-api-contract.md` (section "Gate pipeline", last paragraph, and "Error semantics") hands it to `docs/05-open-questions.md` §1. That document is not part of the input.
+- O3. The full explanation of why the weight-band check belongs to `AIRCRAFT`: `03-api-contract.md` (section "Gate pipeline") hands it to the "gate implementation status" section of `CLAUDE.md`. That file is not part of the input.
+- O4. Management of zone reference data: `03-api-contract.md` (section "Reference data") hands it to `supabase/seed.sql` and `supabase/SETUP.md`. Those files are not part of the input.
 
 ## Entry Criteria / Environments
 
 ### Entry Criteria
 
-1. Requirements, test goals are clear for testers
-2. All test environments and test tools are ready and can be used
-3. Test data / test documentation are available and can be used
-4. Test cases are ready and can be used
+- EN1. Requirements, test goals are clear for testers
+- EN2. All test environments and test tools are ready and can be used
+- EN3. Test data / test documentation are available and can be used
+- EN4. Test cases are ready and can be used
 
 ### Environments
 
@@ -143,9 +143,9 @@ Verify that the API behaves as the contract states:
 
 ### Exit Criteria
 
-1. Test time was finished
-2. More than 85% of all test cases were passed
-3. Test Report is ready and can be provided to stakeholders
+- EX1. Test time was finished
+- EX2. More than 85% of all test cases were passed
+- EX3. Test Report is ready and can be provided to stakeholders
 
 ### Tools
 

@@ -180,28 +180,28 @@ Verify that the system applies the following rules and returns the stated citati
 
 ### In Scope
 
-- Gate evaluation order and first-failure behaviour (G4)
-- `PILOT`, `AIRCRAFT`, `ZONE` and `TIME_WINDOW` gate logic (G5-G23)
-- Pilot currency, weight bands, zone catalogue seed values, curfew values (G22-G31)
-- Registration-time refusal above 30,000 g at the `/aircraft` write (G10, G28)
-- Cancellation deadline for `APPROVED` requests (G32)
-- `rule_reference` values (G33, G34)
+- S1. Gate evaluation order and first-failure behaviour (G4)
+- S2. `PILOT`, `AIRCRAFT`, `ZONE` and `TIME_WINDOW` gate logic (G5-G23)
+- S3. Pilot currency, weight bands, zone catalogue seed values, curfew values (G22-G31)
+- S4. Registration-time refusal above 30,000 g at the `/aircraft` write (G10, G28)
+- S5. Cancellation deadline for `APPROVED` requests (G32)
+- S6. `rule_reference` values (G33, G34)
 
 ### Out Of Scope
 
-- Persisted fields, states, endpoints and response contracts: `06-business-rules.md` ("Companion to") says they are defined in *SkyPermit — System Reference*, which this document does not restate. That document is not part of the input.
-- The `CR-1` proposal: `06-business-rules.md` (header) says it is explicitly not a source and nothing in it is in force.
-- `OH-1` v1.4: `06-business-rules.md` (header) says it is superseded and retained for audit only (its superseded values are covered only as things not to carry forward, G25, G29).
-- Reasoning behind resolutions and canonical open-question status: `06-business-rules.md` (§7) hands this to `docs/05-open-questions.md` and `docs/07-clarifications.md`. Those documents are not part of the input.
+- O1. Persisted fields, states, endpoints and response contracts: `06-business-rules.md` ("Companion to") says they are defined in *SkyPermit — System Reference*, which this document does not restate. That document is not part of the input.
+- O2. The `CR-1` proposal: `06-business-rules.md` (header) says it is explicitly not a source and nothing in it is in force.
+- O3. `OH-1` v1.4: `06-business-rules.md` (header) says it is superseded and retained for audit only (its superseded values are covered only as things not to carry forward, G25, G29).
+- O4. Reasoning behind resolutions and canonical open-question status: `06-business-rules.md` (§7) hands this to `docs/05-open-questions.md` and `docs/07-clarifications.md`. Those documents are not part of the input.
 
 ## Entry Criteria / Environments
 
 ### Entry Criteria
 
-1. Requirements, test goals are clear for testers
-2. All test environments and test tools are ready and can be used
-3. Test data / test documentation are available and can be used
-4. Test cases are ready and can be used
+- EN1. Requirements, test goals are clear for testers
+- EN2. All test environments and test tools are ready and can be used
+- EN3. Test data / test documentation are available and can be used
+- EN4. Test cases are ready and can be used
 
 ### Environments
 
@@ -212,9 +212,9 @@ Verify that the system applies the following rules and returns the stated citati
 
 ### Exit Criteria
 
-1. Test time was finished
-2. More than 85% of all test cases were passed
-3. Test Report is ready and can be provided to stakeholders
+- EX1. Test time was finished
+- EX2. More than 85% of all test cases were passed
+- EX3. Test Report is ready and can be provided to stakeholders
 
 ### Tools
 

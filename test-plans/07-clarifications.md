@@ -47,24 +47,24 @@ Verify that behaviour matches the clarifications recorded here:
 
 ### In Scope
 
-- `AIRCRAFT` gate weight-band check and its gate assignment (G3, G4, G10)
-- Absence of any gate tied to `Aircraft.status` / `Pilot.status` (G5)
-- `Operator.status = SUSPENDED` handling on create, submit and approve (G6, G7)
-- `ZONE` gate checks: altitude, operator authorisation level, zone `active` (G8, G9, G11)
-- Precedence of this addendum over `docs/06-business-rules.md` wording (G1)
+- S1. `AIRCRAFT` gate weight-band check and its gate assignment (G3, G4, G10)
+- S2. Absence of any gate tied to `Aircraft.status` / `Pilot.status` (G5)
+- S3. `Operator.status = SUSPENDED` handling on create, submit and approve (G6, G7)
+- S4. `ZONE` gate checks: altitude, operator authorisation level, zone `active` (G8, G9, G11)
+- S5. Precedence of this addendum over `docs/06-business-rules.md` wording (G1)
 
 ### Out Of Scope
 
-- Current status of each item: `07-clarifications.md` (intro, second paragraph) hands it to `docs/05-open-questions.md`. That document is not part of the input.
+- O1. Current status of each item: `07-clarifications.md` (intro, second paragraph) hands it to `docs/05-open-questions.md`. That document is not part of the input.
 
 ## Entry Criteria / Environments
 
 ### Entry Criteria
 
-1. Requirements, test goals are clear for testers
-2. All test environments and test tools are ready and can be used
-3. Test data / test documentation are available and can be used
-4. Test cases are ready and can be used
+- EN1. Requirements, test goals are clear for testers
+- EN2. All test environments and test tools are ready and can be used
+- EN3. Test data / test documentation are available and can be used
+- EN4. Test cases are ready and can be used
 
 ### Environments
 
@@ -75,9 +75,9 @@ Verify that behaviour matches the clarifications recorded here:
 
 ### Exit Criteria
 
-1. Test time was finished
-2. More than 85% of all test cases were passed
-3. Test Report is ready and can be provided to stakeholders
+- EX1. Test time was finished
+- EX2. More than 85% of all test cases were passed
+- EX3. Test Report is ready and can be provided to stakeholders
 
 ### Tools
 

@@ -7,7 +7,7 @@ Source: ../skypermit/docs/05-open-questions.md
 
 ## Introduction
 
-This plan covers `05-open-questions.md` ("Open Questions — Canonical Status"), which the documentation calls the single source of truth for "is this resolved yet." It tracks the current status of five open questions about gate behaviour and the `Operator.status = SUSPENDED` handling. It records status only; the reasoning for each resolved item is kept elsewhere (see Out Of Scope).
+This plan covers `05-open-questions.md` ("Open Questions — Canonical Status"), which the documentation calls the single source of truth for "is this resolved yet." It tracks the current status of five questions about gate behaviour and the `Operator.status = SUSPENDED` handling: three are resolved and two (rows 4 and 5) are still open. It records status only; the reasoning for each resolved item is kept elsewhere (see Out Of Scope).
 
 ## Goals
 
@@ -50,25 +50,25 @@ Verify that the system and its behaviour match the statuses and rules recorded i
 
 ### In Scope
 
-- Status table rows 1-5 and their resolution state (G2-G7)
-- Handling of `Operator.status = SUSPENDED` on create, submit and approve (G5, G8, G9)
-- Zone `active` rule under the `ZONE` gate and its `rule_reference` (G6, G10)
-- Absence of any gate tied to `Aircraft.status` and `Pilot.status` (G3)
-- Existence of defined logic for all four gates (G11)
+- S1. Status table rows 1-5 and their resolution state (G2-G7)
+- S2. Handling of `Operator.status = SUSPENDED` on create, submit and approve (G5, G8, G9)
+- S3. Zone `active` rule under the `ZONE` gate and its `rule_reference` (G6, G10)
+- S4. Absence of any gate tied to `Aircraft.status` and `Pilot.status` (G3)
+- S5. Existence of defined logic for all four gates (G11)
 
 ### Out Of Scope
 
-- The reasoning and provenance of each resolved item: `05-open-questions.md` (intro paragraph) says `docs/07-clarifications.md` is the place to read that, and this file only tracks current status.
-- The gate logic itself: `05-open-questions.md` ("What this means for implementation") says it is defined in `docs/06-business-rules.md`. That document is not part of the input.
+- O1. The reasoning and provenance of each resolved item: `05-open-questions.md` (intro paragraph) says `docs/07-clarifications.md` is the place to read that, and this file only tracks current status.
+- O2. The gate logic itself: `05-open-questions.md` ("What this means for implementation") says it is defined in `docs/06-business-rules.md`. That document is not part of the input.
 
 ## Entry Criteria / Environments
 
 ### Entry Criteria
 
-1. Requirements, test goals are clear for testers
-2. All test environments and test tools are ready and can be used
-3. Test data / test documentation are available and can be used
-4. Test cases are ready and can be used
+- EN1. Requirements, test goals are clear for testers
+- EN2. All test environments and test tools are ready and can be used
+- EN3. Test data / test documentation are available and can be used
+- EN4. Test cases are ready and can be used
 
 ### Environments
 
@@ -79,9 +79,9 @@ Verify that the system and its behaviour match the statuses and rules recorded i
 
 ### Exit Criteria
 
-1. Test time was finished
-2. More than 85% of all test cases were passed
-3. Test Report is ready and can be provided to stakeholders
+- EX1. Test time was finished
+- EX2. More than 85% of all test cases were passed
+- EX3. Test Report is ready and can be provided to stakeholders
 
 ### Tools
 

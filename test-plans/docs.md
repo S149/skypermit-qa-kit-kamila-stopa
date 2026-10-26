@@ -565,33 +565,33 @@ Verify the whole application as the eight documents describe it. The first numbe
 
 ### In Scope
 
-- Entities and schema: the seven entities with all fields, keys, constraints and enumerations, the four migrations, derived values, time handling and the `flight_purpose` limit (G1)
-- Request lifecycle: seven states, legal and illegal transitions, terminal states, cancellation deadline, aircraft overlap rule, single place for state writes and the audit trigger (G2)
-- API: all `/api/v1` endpoints (1-16, the unnumbered authentication endpoints, `GET /pilots`, `GET /aircraft`), authentication and authorisation, owner and reviewer access rules, error statuses and the `422` body (G3)
-- Frontend: operator portal (login, register, registries, request form, check before submitting, my requests, request detail), reviewer queue, role switcher, `data-testid` contract, no pre-filtering of pickers (G4)
-- Gate pipeline: `PILOT`, `AIRCRAFT`, `ZONE`, `TIME_WINDOW` with every condition, threshold, citation and curfew value in `06-business-rules.md` and `07-clarifications.md`; the aircraft weight-ceiling registration rule; the zone catalogue; the weight band thresholds; the pilot currency threshold (G6, G7)
-- Open questions as test inputs: `Operator.status = SUSPENDED` handling and the `ZC-2026.1 §4` citation are tested for what is defined and reported as gaps for what is not (G5)
-- Diagrams: consistency of `08-uml-diagrams.md` with the data model and state machine (G8)
+- S1. Entities and schema: the seven entities with all fields, keys, constraints and enumerations, the four migrations, derived values, time handling and the `flight_purpose` limit (G1)
+- S2. Request lifecycle: seven states, legal and illegal transitions, terminal states, cancellation deadline, aircraft overlap rule, single place for state writes and the audit trigger (G2)
+- S3. API: all `/api/v1` endpoints (1-16, the unnumbered authentication endpoints, `GET /pilots`, `GET /aircraft`), authentication and authorisation, owner and reviewer access rules, error statuses and the `422` body (G3)
+- S4. Frontend: operator portal (login, register, registries, request form, check before submitting, my requests, request detail), reviewer queue, role switcher, `data-testid` contract, no pre-filtering of pickers (G4)
+- S5. Gate pipeline: `PILOT`, `AIRCRAFT`, `ZONE`, `TIME_WINDOW` with every condition, threshold, citation and curfew value in `06-business-rules.md` and `07-clarifications.md`; the aircraft weight-ceiling registration rule; the zone catalogue; the weight band thresholds; the pilot currency threshold (G6, G7)
+- S6. Open questions as test inputs: `Operator.status = SUSPENDED` handling and the `ZC-2026.1 §4` citation are tested for what is defined and reported as gaps for what is not (G5)
+- S7. Diagrams: consistency of `08-uml-diagrams.md` with the data model and state machine (G8)
 
 ### Out Of Scope
 
-- `CR-1` (Airspace Policy Group proposal, 2026-03-02): `06-business-rules.md`, header ("Explicitly not a source") says it is "a proposal, not an adopted standard" and nothing in it is in force.
-- `OH-1` v1.4: `06-business-rules.md`, header, says it is superseded and retained for audit only.
-- The text of the source documents `OH-1`, `ZC-2026.1`, `A-7`, `TSD-4` and `API-REF`: `06-business-rules.md` ("Sources used") says each rule carries a citation back to the document that actually governs it. Those documents are not part of the input.
-- The document "SkyPermit — System Reference": `06-business-rules.md` ("Companion to") says it defines persisted fields, states, endpoints and response contracts, and that `06-business-rules.md` does not restate it.
-- Raising an operator's `authorisation_level`: `03-api-contract.md` ("`authorisation_level` is no longer self-service") and `04-frontend-spec.md` ("Operator portal") say it is an out-of-band admin action.
-- Zone population and editing: `01-data-model.md` (entity `Zone`) and `03-api-contract.md` ("Reference data") hand it to `supabase/seed.sql` and `supabase/SETUP.md`.
-- The full explanation of why the weight-band check belongs to `AIRCRAFT`: `03-api-contract.md` ("Gate pipeline") hands it to the "gate implementation status" section of `CLAUDE.md`.
-- Visual design and consumer-grade polish of the frontend: `04-frontend-spec.md`, first paragraph ("Styling is intentionally minimal", "Don't over-invest in visual design here").
+- O1. `CR-1` (Airspace Policy Group proposal, 2026-03-02): `06-business-rules.md`, header ("Explicitly not a source") says it is "a proposal, not an adopted standard" and nothing in it is in force.
+- O2. `OH-1` v1.4: `06-business-rules.md`, header, says it is superseded and retained for audit only.
+- O3. The text of the source documents `OH-1`, `ZC-2026.1`, `A-7`, `TSD-4` and `API-REF`: `06-business-rules.md` ("Sources used") says each rule carries a citation back to the document that actually governs it. Those documents are not part of the input.
+- O4. The document "SkyPermit — System Reference": `06-business-rules.md` ("Companion to") says it defines persisted fields, states, endpoints and response contracts, and that `06-business-rules.md` does not restate it.
+- O5. Raising an operator's `authorisation_level`: `03-api-contract.md` ("`authorisation_level` is no longer self-service") and `04-frontend-spec.md` ("Operator portal") say it is an out-of-band admin action.
+- O6. Zone population and editing: `01-data-model.md` (entity `Zone`) and `03-api-contract.md` ("Reference data") hand it to `supabase/seed.sql` and `supabase/SETUP.md`.
+- O7. The full explanation of why the weight-band check belongs to `AIRCRAFT`: `03-api-contract.md` ("Gate pipeline") hands it to the "gate implementation status" section of `CLAUDE.md`.
+- O8. Visual design and consumer-grade polish of the frontend: `04-frontend-spec.md`, first paragraph ("Styling is intentionally minimal", "Don't over-invest in visual design here").
 
 ## Entry Criteria / Environments
 
 ### Entry Criteria
 
-1. Requirements, test goals are clear for testers
-2. All test environments and test tools are ready and can be used
-3. Test data / test documentation are available and can be used
-4. Test cases are ready and can be used
+- EN1. Requirements, test goals are clear for testers
+- EN2. All test environments and test tools are ready and can be used
+- EN3. Test data / test documentation are available and can be used
+- EN4. Test cases are ready and can be used
 
 ### Environments
 
@@ -602,9 +602,9 @@ Verify the whole application as the eight documents describe it. The first numbe
 
 ### Exit Criteria
 
-1. Test time was finished
-2. More than 85% of all test cases were passed
-3. Test Report is ready and can be provided to stakeholders
+- EX1. Test time was finished
+- EX2. More than 85% of all test cases were passed
+- EX3. Test Report is ready and can be provided to stakeholders
 
 ### Tools
 

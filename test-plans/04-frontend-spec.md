@@ -69,26 +69,26 @@ Verify that the frontend behaves as the documentation states:
 
 ### In Scope
 
-- Role switcher in the header (G1) and reviewer id entry in the header UI (G3)
-- Operator login, registration and session behaviour: `/login`, `/register`, `operator-login-link`, `operator-register-link`, `operator-session-info`, `operator-logout-button` (G2, G5-G7, G17)
-- Operator portal: pilot and aircraft registry pages and create forms, request creation form and its pickers, "Check before submitting", "My requests" list with state filter, request detail with rejection reason and rule reference (G4, G8-G12, G18)
-- Reviewer queue: pending requests table, sorting by submission time, request detail with four gate results, approve and reject with required note (G13-G15)
-- `data-testid` contract on every interactive element (G16, G17)
-- Absence of client-side pre-filtering in the request creation form (G18)
+- S1. Role switcher in the header (G1) and reviewer id entry in the header UI (G3)
+- S2. Operator login, registration and session behaviour: `/login`, `/register`, `operator-login-link`, `operator-register-link`, `operator-session-info`, `operator-logout-button` (G2, G5-G7, G17)
+- S3. Operator portal: pilot and aircraft registry pages and create forms, request creation form and its pickers, "Check before submitting", "My requests" list with state filter, request detail with rejection reason and rule reference (G4, G8-G12, G18)
+- S4. Reviewer queue: pending requests table, sorting by submission time, request detail with four gate results, approve and reject with required note (G13-G15)
+- S5. `data-testid` contract on every interactive element (G16, G17)
+- S6. Absence of client-side pre-filtering in the request creation form (G18)
 
 ### Out Of Scope
 
-- Authentication and authorisation rules (server-side), which `04-frontend-spec.md` ("Frontend Scope", the ⚠️ note) hands to `docs/03-api-contract.md`, section "Authentication & authorisation". That document is not part of the input.
-- Visual design polish: `04-frontend-spec.md` ("Frontend Scope", first paragraph) says styling is intentionally minimal, the interface is not a polished consumer product, and not to over-invest in visual design.
+- O1. Authentication and authorisation rules (server-side), which `04-frontend-spec.md` ("Frontend Scope", the ⚠️ note) hands to `docs/03-api-contract.md`, section "Authentication & authorisation". That document is not part of the input.
+- O2. Visual design polish: `04-frontend-spec.md` ("Frontend Scope", first paragraph) says styling is intentionally minimal, the interface is not a polished consumer product, and not to over-invest in visual design.
 
 ## Entry Criteria / Environments
 
 ### Entry Criteria
 
-1. Requirements, test goals are clear for testers
-2. All test environments and test tools are ready and can be used
-3. Test data / test documentation are available and can be used
-4. Test cases are ready and can be used
+- EN1. Requirements, test goals are clear for testers
+- EN2. All test environments and test tools are ready and can be used
+- EN3. Test data / test documentation are available and can be used
+- EN4. Test cases are ready and can be used
 
 ### Environments
 
@@ -99,9 +99,9 @@ Verify that the frontend behaves as the documentation states:
 
 ### Exit Criteria
 
-1. Test time was finished
-2. More than 85% of all test cases were passed
-3. Test Report is ready and can be provided to stakeholders
+- EX1. Test time was finished
+- EX2. More than 85% of all test cases were passed
+- EX3. Test Report is ready and can be provided to stakeholders
 
 ### Tools
 

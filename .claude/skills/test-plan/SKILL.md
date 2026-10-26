@@ -45,14 +45,14 @@ These sections have fixed values. Do not ask for them:
 
 - **People**: `Kamila Stopa, Senior Test Engineer`.
 - **Entry Criteria**, the same for every plan regardless of the documentation:
-  1. Requirements, test goals are clear for testers
-  2. All test environments and test tools are ready and can be used
-  3. Test data / test documentation are available and can be used
-  4. Test cases are ready and can be used
+  - EN1. Requirements, test goals are clear for testers
+  - EN2. All test environments and test tools are ready and can be used
+  - EN3. Test data / test documentation are available and can be used
+  - EN4. Test cases are ready and can be used
 - **Exit Criteria**, the same for every plan regardless of the documentation:
-  1. Test time was finished
-  2. More than 85% of all test cases were passed
-  3. Test Report is ready and can be provided to stakeholders
+  - EX1. Test time was finished
+  - EX2. More than 85% of all test cases were passed
+  - EX3. Test Report is ready and can be provided to stakeholders
 - **Environments**:
   - OS: Microsoft Windows, the version installed on the user's current machine (check it, do not guess).
   - Browser: Chrome (latest version).
@@ -66,9 +66,9 @@ Mark every gap with `[OPEN QUESTION: what needs to be clarified]`, in the place 
 
 ## Numbering
 
-Test cases cite the plan by item number, so every item they may need to cite must have a stable, unique number. Number the items of **Goals** with `G` and the items of **Risks** with `R`, to any depth: `G1`, `G1.1`, `G1.1.1`; `R1`, `R1.1`.
+Test cases cite the plan by item number, so every item they may need to cite must have a stable, unique number. Number the items of **Goals** with `G`, **Risks** with `R`, **In Scope** with `S` and **Out Of Scope** with `O`, to any depth: `G1`, `G1.1`, `G1.1.1`; `R1`, `R1.1`; `S1`, `S1.1`; `O1`, `O2`. The fixed **Entry Criteria** are numbered `EN1`-`EN4` and the fixed **Exit Criteria** `EX1`-`EX3`, exactly as listed above. Each prefix has its own sequence that starts from 1.
 
-- An item gets its own number only if it can be verified (or, for risks, mitigated) on its own: an endpoint, a state, a transition, a rule, a field constraint, an enumeration. Text that only explains or exemplifies its parent item (an example, a parenthetical) gets no number.
+- An item gets its own number only if it can be verified (or, for risks, mitigated) on its own: an endpoint, a state, a transition, a rule, a field constraint, an enumeration. Text that only explains or exemplifies its parent item (an example, a parenthetical) gets no number. Every item of Out Of Scope gets its own number, because each one has its own citation.
 - Open questions stay inside the item they belong to, as described above; they do not get numbers.
 - A number is never changed and never reused. When a plan is regenerated and the file already exists, keep the numbers already given to the items that still exist, give a new item the next free number in its parent, and do not renumber the rest. If the plan has no earlier version, number from 1.
 - Write the number at the start of the item, followed by a period and a space (`- G3.2. Text`).
