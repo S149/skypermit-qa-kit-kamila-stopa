@@ -3,93 +3,119 @@
 Project: Skypermit
 Site: https://skypermit.vercel.app/
 
-Source: `../skypermit/docs/02-state-machine.md`
+Source: ../skypermit/docs/02-state-machine.md
 
 ## Introduction
-A `FlightRequest` occupies exactly one of seven states at any time: `DRAFT`, `SUBMITTED`, `UNDER_REVIEW`, `APPROVED`, `REJECTED`, `CANCELLED`, `COMPLETED`. Any transition not shown in the documentation is invalid and must return `409`, including transitions that look harmless, such as re-submitting something already `UNDER_REVIEW`. The documentation gives the lifecycle as a diagram and, because the diagram's cancel arrows and gate pass/fail arrows cross visually, as a table with one row per legal transition; both carry the same information.
+
+This plan covers `02-state-machine.md` ("Request Lifecycle"): the seven states of a `FlightRequest`, the legal transitions between them, the rule that every other transition is illegal and returns `409`, the cancellation deadline for `APPROVED` requests, the aircraft schedule overlap rule that affects which requests count, and the implementation note about a single place for state writes and a database trigger as a second line of defense.
 
 ## Goals
-- Verify that a `FlightRequest` is in exactly one of the seven states at any time.
-- Verify that the diagram and the transition table describe the same set of legal transitions.
-- Verify every legal transition (one row of the table each) and that it ends in the documented state:
-  - `DRAFT` → submit → `SUBMITTED`, immediately followed by `UNDER_REVIEW` or `REJECTED`; gates run synchronously and the caller never observes `SUBMITTED` at rest.
-  - `SUBMITTED` → gates pass (automatic) → `UNDER_REVIEW`; not a caller-invoked action, part of the submit call's own outcome.
-  - `SUBMITTED` → gates fail (automatic) → `REJECTED`; `failing_gate` / `rejection_reason` populated.
-  - `UNDER_REVIEW` → approve → `APPROVED`; reviewer-only (`X-Reviewer-Id`); writes a `ReviewAction` row.
-  - `UNDER_REVIEW` → reject → `REJECTED`; reviewer-only; `note` required.
-  - `APPROVED` → complete → `COMPLETED`; maintenance endpoint only, never inferred from elapsed time.
-  - `DRAFT` / `SUBMITTED` / `UNDER_REVIEW` → cancel → `CANCELLED`; operator-initiated.
-  - `APPROVED` → cancel → `CANCELLED`; operator-initiated, only up to 2 hours before `window_start`.
-- Verify that every `(from, action)` pair not listed as legal returns `409`, including pairs whose source state looks like a plausible source for the action (for example `submit` from `UNDER_REVIEW`).
-- Verify the terminal states: `REJECTED`, `CANCELLED` and `COMPLETED` are terminal, and `REJECTED`, `CANCELLED` or `COMPLETED` to anything returns `409`. `DRAFT`, `SUBMITTED`, `UNDER_REVIEW` and `APPROVED` are non-terminal.
-- Verify the meaning of each state: `DRAFT` (created, never submitted, no gates have run); `SUBMITTED` (transient, the submit call runs all four gates and leaves this state immediately, a request should never be observed sitting in it); `UNDER_REVIEW` (all gates passed, awaiting a reviewer decision); `APPROVED` (authorised, still cancellable until the deadline); `REJECTED` (failed a gate, or refused by a reviewer; `failing_gate` and `rejection_reason` populated); `CANCELLED` (withdrawn by the operator); `COMPLETED` (flight concluded, set only by the maintenance completion endpoint).
-- Verify that gate pass and gate fail are automatic outcomes of the submit call, not caller-invoked actions.
-- Verify the cancellation deadline: cancelling an `APPROVED` request closer than 2 hours before `window_start` is rejected by the cancel endpoint with `409` (a state-transition question, not a gate failure).
-- Verify the aircraft schedule overlap check: only `APPROVED` and `UNDER_REVIEW` requests are counted; `DRAFT`, `REJECTED`, `CANCELLED` and `COMPLETED` are invisible to it.
-- Verify that a request that passed `validate` can still fail at `submit` if another request for the same aircraft was approved in the interim (expected behaviour, not a bug to work around).
-- Verify that every write to `FlightRequest.state` goes through one place in the code (legal-transition check and audit log write), and that every state change is also logged by the database trigger as a second line of defense.
-- [OPEN QUESTION: the maintenance completion endpoint (path, method, caller) is not defined in the document]
-- [OPEN QUESTION: the document says `SUBMITTED` → cancel is "only reachable in the narrow window before gates resolve it automatically" and also that a caller never observes `SUBMITTED` at rest; how can `SUBMITTED` → cancel be exercised in a test]
-- [OPEN QUESTION: the document says `REJECTED` has `failing_gate` and `rejection_reason` populated, including when refused by a reviewer; what is `failing_gate` after a reviewer rejection, which is not a gate failure]
-- [OPEN QUESTION: the `409` response body is not defined in the document]
-- [OPEN QUESTION: the document says the overlap check runs "inside the `AIRCRAFT` / `TIME_WINDOW` gates" without saying which of the two gates is named in `failing_gate` for an overlap]
-- [OPEN QUESTION: the document does not say what happens to the exact 2-hour boundary (cancel exactly 2 hours before `window_start`)]
+
+Verify that the lifecycle behaves as the documentation states:
+
+- G1. A `FlightRequest` occupies exactly one of seven states at any time.
+- G2. States.
+  - G2.1. `DRAFT`: created, never submitted; no gates have run. Not terminal.
+  - G2.2. `SUBMITTED`: transient. The submit call runs all four gates and leaves this state immediately; a request is never observed sitting in `SUBMITTED`. Not terminal.
+  - G2.3. `UNDER_REVIEW`: all gates passed; awaiting a reviewer decision. Not terminal.
+  - G2.4. `APPROVED`: authorised; still cancellable until the deadline (G5). Not terminal.
+  - G2.5. `REJECTED`: failed a gate, or refused by a reviewer; `failing_gate` and `rejection_reason` are populated. Terminal. [OPEN QUESTION: whether `failing_gate` is populated when a reviewer refuses the request is not stated]
+  - G2.6. `CANCELLED`: withdrawn by the operator. Terminal.
+  - G2.7. `COMPLETED`: flight concluded. Set only by the maintenance completion endpoint, never inferred from elapsed time. Terminal. [OPEN QUESTION: the path, the caller and the response of the maintenance completion endpoint are not stated]
+- G3. Legal transitions (one row of the transition table each).
+  - G3.1. `DRAFT` --submit--> `SUBMITTED`, which resolves immediately into `UNDER_REVIEW` or `REJECTED`. Gates run synchronously; the caller never observes `SUBMITTED` at rest.
+  - G3.2. `SUBMITTED` --gates pass (automatic)--> `UNDER_REVIEW`. It is not a caller-invoked action; it is part of the submit call's own outcome.
+  - G3.3. `SUBMITTED` --gates fail (automatic)--> `REJECTED`, with `failing_gate` and `rejection_reason` populated. [OPEN QUESTION: the value of `rejection_reason` for a gate failure is not stated]
+  - G3.4. `UNDER_REVIEW` --approve--> `APPROVED`. Reviewer-only (`X-Reviewer-Id`); writes a `ReviewAction` row.
+  - G3.5. `UNDER_REVIEW` --reject--> `REJECTED`. Reviewer-only; `note` is required.
+  - G3.6. `APPROVED` --complete--> `COMPLETED`. Maintenance endpoint only; never inferred from elapsed time.
+  - G3.7. `DRAFT` --cancel--> `CANCELLED`. Operator-initiated.
+  - G3.8. `SUBMITTED` --cancel--> `CANCELLED`. Operator-initiated; only reachable in the narrow window before the gates resolve the request automatically. [OPEN QUESTION: the narrow window is not defined, and it is not stated how a caller can reach it when gates run synchronously]
+  - G3.9. `UNDER_REVIEW` --cancel--> `CANCELLED`. Operator-initiated.
+  - G3.10. `APPROVED` --cancel--> `CANCELLED`. Operator-initiated, only up to 2 hours before `window_start` (G5).
+- G4. Illegal transitions. Any `(from, action)` pair not listed in G3 is illegal and must return `409`, including pairs whose `from` looks like a plausible source state for the action. [OPEN QUESTION: the body of the `409` response for an illegal transition is not stated in this document]
+  - G4.1. From `REJECTED`, any action is illegal.
+  - G4.2. From `CANCELLED`, any action is illegal.
+  - G4.3. From `COMPLETED`, any action is illegal.
+  - G4.4. `submit` from `UNDER_REVIEW` (re-submitting something already under review) is illegal.
+- G5. Cancellation deadline.
+  - G5.1. Cancelling an `APPROVED` request is allowed only up to 2 hours before `window_start`.
+  - G5.2. Closer than that, the cancel endpoint rejects it with `409`. This is a state-transition question, not a gate failure. [OPEN QUESTION: whether a cancellation exactly 2 hours before `window_start` is allowed is not stated]
+- G6. Aircraft schedule overlap.
+  - G6.1. Only `APPROVED` and `UNDER_REVIEW` requests are counted by the overlap check inside the `AIRCRAFT` / `TIME_WINDOW` gates. [OPEN QUESTION: the document names two gates ("`AIRCRAFT` / `TIME_WINDOW`") and does not say which one holds the overlap check]
+  - G6.2. `DRAFT`, `REJECTED`, `CANCELLED` and `COMPLETED` requests are invisible to the overlap check.
+  - G6.3. A request that passed `validate` can still fail at `submit` if another request for the same aircraft was approved in the interim. This is expected behaviour, not a bug to work around.
+- G7. Implementation note.
+  - G7.1. Every write to `FlightRequest.state` goes through one place in the code (not set ad hoc from multiple endpoint handlers), so the legal-transition check and the audit log write cannot be forgotten on any path.
+  - G7.2. The provided migration also logs every state change via a database trigger, as a second line of defense (`supabase/migrations/0001_init.sql`).
 
 ## Risks
-- A transition that looks harmless but is not listed is accepted instead of returning `409`.
-- A caller observes `SUBMITTED` at rest because the gates did not resolve it immediately.
-- `COMPLETED` is set from elapsed time or from somewhere other than the maintenance completion endpoint.
-- Cancelling an `APPROVED` request closer than 2 hours before `window_start` is accepted, or is rejected with a status other than `409`.
-- A request that passed `validate` fails at `submit` because another request for the same aircraft was approved in the interim. The documentation states this is expected behaviour.
-- A state write bypasses the single place in the code, so the legal-transition check or the audit log write is skipped on some path.
-- The application-level audit write and the database trigger (`supabase/migrations/0001_init.sql`) disagree, or a state change is not logged.
-- A terminal state is left by some transition.
-- Requests in a state other than `APPROVED` or `UNDER_REVIEW` are wrongly counted by the aircraft overlap check.
-- The diagram and the table are read differently, because the cancel arrows and the gate pass/fail arrows cross visually.
+
+- R1. An illegal transition accepted instead of returning `409`, including a harmless-looking one such as re-submitting a request already `UNDER_REVIEW` (G4).
+- R2. `SUBMITTED` observed at rest, because gates do not run synchronously inside submit (G2.2, G3.1).
+- R3. `COMPLETED` set by elapsed time or through an endpoint other than the maintenance completion endpoint (G2.7, G3.6).
+- R4. An `APPROVED` request cancelled closer than 2 hours before `window_start`, or a refused cancellation returned as something other than `409` or as a gate failure (G5).
+- R5. A request in `DRAFT`, `REJECTED`, `CANCELLED` or `COMPLETED` counted by the overlap check, or `UNDER_REVIEW` / `APPROVED` not counted (G6.1, G6.2).
+- R6. A request that passed `validate` failing at `submit` being treated as a defect instead of expected behaviour (G6.3).
+- R7. A state write that bypasses the single place, so the transition check or the audit log write is skipped (G7.1).
+- R8. A terminal state (`REJECTED`, `CANCELLED`, `COMPLETED`) left by any action (G4.1-G4.3).
 
 ## In Scope / Out Of Scope
-**In Scope:**
-- **States:** the seven states and their meanings, as listed in Goals.
-- **Terminal / non-terminal flags** of each state.
-- **Legal transitions:** the ten rows of the transition table (diagram and table).
-- **Illegal transitions:** every other `(from, action)` pair returns `409`.
-- **Cancellation deadline:** `APPROVED` cancel only up to 2 hours before `window_start`, otherwise `409`.
-- **Aircraft schedule overlap:** counts only `APPROVED` and `UNDER_REVIEW`.
-- **Implementation note:** a single place in the code for every write to `FlightRequest.state`; database trigger as a second line of defense.
 
-**Out Of Scope** (each item is handed to another document by `02-state-machine.md`):
-- The source of the cancellation deadline: `docs/06-business-rules.md` §5 (`TSD-4 §6`), per "Rules that affect the state machine but live elsewhere".
-- The audit log trigger definition: `supabase/migrations/0001_init.sql`, per "Implementation note".
+### In Scope
+
+- The seven states and their meaning (G1, G2)
+- Legal transitions and their actors (G3)
+- The `409` rule for every other transition (G4)
+- The cancellation deadline for `APPROVED` requests (G5)
+- The effect of request states on the overlap check (G6)
+- The single place for state writes and the database trigger (G7)
+
+### Out Of Scope
+
+- The source text of the cancellation deadline rule: `02-state-machine.md` (section "Rules that affect the state machine but live elsewhere") cites `docs/06-business-rules.md` §5 (`TSD-4 §6`) as its source. That document is not part of the input.
 
 ## Entry Criteria / Environments
-Entry Criteria:
+
+### Entry Criteria
+
 1. Requirements, test goals are clear for testers
 2. All test environments and test tools are ready and can be used
 3. Test data / test documentation are available and can be used
 4. Test cases are ready and can be used
 
-Environments:
-- OS: Microsoft Windows 11 Pro (10.0.26200)
+### Environments
+
+- OS: Microsoft Windows 11 Pro (version 10.0.26200)
 - Browser: Chrome (latest version)
 
 ## Exit Criteria / Tools
-Exit Criteria:
+
+### Exit Criteria
+
 1. Test time was finished
 2. More than 85% of all test cases were passed
 3. Test Report is ready and can be provided to stakeholders
 
-Tools:
+### Tools
+
 - SVC: GitHub
 - Test design: Claude Code
-- Supabase (database trigger and migration `0001_init.sql`)
-- API: submit, validate, cancel, approve / reject, maintenance completion endpoint
+- API: the submit, approve, reject, cancel and maintenance completion endpoints, as named in the documentation (paths not given in this document)
+- `X-Reviewer-Id` header
+- Supabase migration `supabase/migrations/0001_init.sql` (state-change trigger)
 
 ## Schedule and Estimations / People
-Schedule and Estimations:
-- Start date / End date: [OPEN QUESTION: start and end dates]
-- Analyses and investigation of testing scope: [OPEN QUESTION: estimation]
-- Create Test Documentation (Test Plan and Test Cases): [OPEN QUESTION: estimation]
-- Testing: [OPEN QUESTION: estimation]
-- Create Test Report: [OPEN QUESTION: estimation]
 
-People: Kamila Stopa, Senior Test Engineer
+### Schedule and Estimations
+
+- Start date: [OPEN QUESTION: not provided]
+- End date: [OPEN QUESTION: not provided]
+- Analyses and investigation of testing scope: [OPEN QUESTION: estimation not provided]
+- Create Test Documentation (Test Plan and Test Cases): [OPEN QUESTION: estimation not provided]
+- Testing: [OPEN QUESTION: estimation not provided]
+- Create Test Report: [OPEN QUESTION: estimation not provided]
+
+### People
+
+Kamila Stopa, Senior Test Engineer

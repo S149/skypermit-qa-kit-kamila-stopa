@@ -64,6 +64,15 @@ If the documentation has nothing for a section that is normally filled from it, 
 
 Mark every gap with `[OPEN QUESTION: what needs to be clarified]`, in the place where the missing information belongs. Do not replace a gap with a plausible-sounding default.
 
+## Numbering
+
+Test cases cite the plan by item number, so every item they may need to cite must have a stable, unique number. Number the items of **Goals** with `G` and the items of **Risks** with `R`, to any depth: `G1`, `G1.1`, `G1.1.1`; `R1`, `R1.1`.
+
+- An item gets its own number only if it can be verified (or, for risks, mitigated) on its own: an endpoint, a state, a transition, a rule, a field constraint, an enumeration. Text that only explains or exemplifies its parent item (an example, a parenthetical) gets no number.
+- Open questions stay inside the item they belong to, as described above; they do not get numbers.
+- A number is never changed and never reused. When a plan is regenerated and the file already exists, keep the numbers already given to the items that still exist, give a new item the next free number in its parent, and do not renumber the rest. If the plan has no earlier version, number from 1.
+- Write the number at the start of the item, followed by a period and a space (`- G3.2. Text`).
+
 ## Completeness
 
 Test cases are derived from this plan, so a requirement missing here is never tested. Writing the plan in one pass is not enough. Steps 1-5 are a separate stage that runs every time, after the draft is written and before the file is saved. Step 6 runs after the file is saved. Never skip any step, even when the draft looks complete.

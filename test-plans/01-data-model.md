@@ -3,96 +3,149 @@
 Project: Skypermit
 Site: https://skypermit.vercel.app/
 
-Source: `../skypermit/docs/01-data-model.md`
+Source: ../skypermit/docs/01-data-model.md
 
 ## Introduction
-The data model consists of seven entities: Operator, Pilot, Aircraft, Zone, FlightRequest, ReviewAction and AuditLog. Zone is read-only reference data (not written by ordinary product flows). AuditLog is append-only. The matching Supabase schema is in `supabase/migrations/0001_init.sql` plus the additive migrations `0002_flight_request_rule_reference.sql`, `0003_operator_auth.sql` and `0004_operators_id_is_auth_user.sql`. The document and these files must stay in sync: if one is changed, the other must be changed too. Operators log in through Supabase Auth.
+
+This plan covers `01-data-model.md` ("Data Model"): seven entities (`Operator`, `Pilot`, `Aircraft`, `Zone`, `FlightRequest`, `ReviewAction`, `AuditLog`), their fields, keys and constraints, the enumerations, the two values that are derived and never stored, and the time handling rules. The matching Supabase schema is kept in `supabase/migrations/`, and the document and the migrations must stay in sync.
 
 ## Goals
-- Verify that the schema matches the documented entities, fields, primary keys, foreign keys, uniqueness constraints and enumerations, and that the document and the migrations stay in sync.
-- Verify Operator: `id` is a UUID primary key and a foreign key to `auth.users(id)` with on delete cascade, set at registration to the Supabase Auth user's own id (the operator row is keyed by its auth identity, not by a separately generated value), with no separate `user_id` column (`0003` added one, `0004` collapsed the two back into `id` alone). Other fields: `legal_name`, `national_id` (unique), `email` (unique), `phone`, `address_line`, `city`, `postal_code`, `authorisation_level`, `registered_on` (date), `status`.
-- Verify Pilot: `id` (UUID, primary key), `operator_id` (FK to Operator), `full_name`, `national_id` (unique), `rating`, `certified_on` (date, source of the derived currency status), `status`. A pilot is registered under one operator.
-- Verify Aircraft: `id` (UUID, primary key), `operator_id` (FK to Operator), `manufacturer`, `model`, `serial_number` (unique), `mtom_grams` (source of the derived weight band), `registered_on` (date), `status`.
-- Verify Zone: `code` (text, primary key), `name`, `zone_class`, `ceiling_metres`, `permitted_bands`, `required_authorisation_level`, `curfew_start` (time), `curfew_end` (time), `active` (boolean). `permitted_bands` holds only weight bands from the fixed `C0`–`C3` taxonomy. `required_authorisation_level` is from the same set as `Operator.authorisation_level`.
-- Verify that Zone is read-only reference data: populated and edited outside ordinary app flows, not written by ordinary product flows and not created via a create-zone form.
-- Verify FlightRequest: `id` (UUID, primary key); FKs `operator_id`, `pilot_id`, `aircraft_id`, `zone_code`; `window_start` and `window_end` (timestamptz, UTC); `requested_altitude_metres`; `flight_purpose`; `state`; `rejection_reason`; `failing_gate`; `rule_reference`; `submitted_at`; `decided_at`; `decided_by` (reviewer identity string).
-- Verify ReviewAction (audit record of one reviewer decision): `id` (UUID, primary key), `flight_request_id` (FK to FlightRequest), `reviewer_id` (taken from the `X-Reviewer-Id` header), `action`, `note`, `created_at`.
-- Verify AuditLog (record of every state transition, on any entity): `id` (UUID, primary key), `entity_type` (for example `"FlightRequest"`), `entity_id`, `from_state`, `to_state`, `actor`, `created_at`.
-- Verify uniqueness of `Operator.national_id`, `Operator.email`, `Pilot.national_id` and `Aircraft.serial_number`.
-- Verify that each enumeration holds exactly its documented values: `Operator.authorisation_level` (`L1`, `L2`, `L3`, ascending privilege), `Operator.status` (`ACTIVE`, `SUSPENDED`), `Pilot.rating` (`R_BASIC`, `R_ADVANCED`, `R_BVLOS`), `Pilot.status` (`ACTIVE`, `INACTIVE`), `Aircraft.status` (`ACTIVE`, `RETIRED`), `Zone.zone_class` (`OPEN`, `CONTROLLED`, `RESTRICTED`), `FlightRequest.failing_gate` (`PILOT`, `AIRCRAFT`, `ZONE`, `TIME_WINDOW`), `ReviewAction.action` (`APPROVE`, `REJECT`).
-- Verify the conditional rules: `rejection_reason` is populated only on rejection; `failing_gate` is populated only on gate-failure rejection; `rule_reference` is populated only on gate-failure rejection, alongside `failing_gate`; `ReviewAction.note` is required when `action` is `REJECT`; `AuditLog.from_state` is nullable (creation events).
-- Verify that `window_end` must be after `window_start`.
-- Verify that `rule_reference` is persisted on the `FlightRequest` (added in `0002`), so a rejected request's rule citation survives past the original `422` response.
-- Verify that pilot currency and aircraft weight band are derived at read time and never stored. Pilot currency is computed at the moment it is checked and exposed as a derived field on the pilot `GET` endpoint.
-- Verify that correcting a registered `mtom_grams` recalculates the weight band immediately and does not revisit flight authorisations already issued.
-- Verify that `window_start` / `window_end` are stored and compared in UTC, that curfew is defined against local zone time, and that the UTC conversion happens at evaluation time inside the `TIME_WINDOW` gate, never at write time.
-- Verify that `flight_purpose` is free text capped at 2,000 characters, enforced in both the API layer and the DB (`char_length` check constraint).
-- Verify that AuditLog records every state transition on any entity and that no update or delete path for it is exposed in the API or the UI.
-- [OPEN QUESTION: the document gives no data type, format, length limit or nullability for fields other than `flight_purpose` (for example `legal_name`, `national_id`, `phone`, `address_line`, `ceiling_metres`, `mtom_grams`, `requested_altitude_metres`); what must be validated]
-- [OPEN QUESTION: the document does not say whether `ReviewAction.note` is allowed or ignored when `action` is `APPROVE`]
-- [OPEN QUESTION: the document does not say when `submitted_at`, `decided_at` and `decided_by` are populated, or whether they are cleared]
-- [OPEN QUESTION: curfew is evaluated against "local zone time", but the document does not say which timezone each zone uses]
-- [OPEN QUESTION: the document does not say how `permitted_bands` is stored (a list or a single text value) or whether the `C0`–`C3` restriction is enforced by a DB constraint]
+
+Verify that the schema and the system behaviour match the data model:
+
+- G1. General rules of the model.
+  - G1.1. There are seven entities: `Operator`, `Pilot`, `Aircraft`, `Zone`, `FlightRequest`, `ReviewAction`, `AuditLog`.
+  - G1.2. `Zone` is read-only reference data, not written by ordinary product flows. It is populated outside the app (`supabase/seed.sql`), not through a create-zone form.
+  - G1.3. `AuditLog` is append-only: no update or delete path is exposed, in the API or in the UI.
+  - G1.4. The schema in `supabase/migrations/0001_init.sql` and the additive migrations `0002_flight_request_rule_reference.sql`, `0003_operator_auth.sql`, `0004_operators_id_is_auth_user.sql` match this document; if one changes, the other changes. [OPEN QUESTION: which fields are required or nullable, and which have default values, is not stated except where a field is described as nullable or populated only in some case]
+- G2. `Operator`: the account under which everything else is registered. Operators log in through Supabase Auth.
+  - G2.1. `id`: UUID, primary key, FK to `auth.users(id)` on delete cascade. It is set at registration to the Supabase Auth user's own id, so the operator row is keyed by its auth identity and is not a separately generated value. `0003_operator_auth.sql` added a second `user_id` column; `0004_operators_id_is_auth_user.sql` collapsed the two back into `id` alone.
+  - G2.2. `legal_name`, `phone`, `address_line`, `city`, `postal_code`, `registered_on` (date) exist.
+  - G2.3. `national_id` is unique.
+  - G2.4. `email` is unique.
+  - G2.5. `authorisation_level` is an enumeration (G9.1).
+  - G2.6. `status` is an enumeration (G9.2).
+- G3. `Pilot`: a certified person, registered under one operator.
+  - G3.1. `id`: UUID, primary key. `operator_id`: FK to `Operator`.
+  - G3.2. `full_name` exists.
+  - G3.3. `national_id` is unique.
+  - G3.4. `rating` is an enumeration (G9.3).
+  - G3.5. `certified_on` (date) is the source of the derived currency status (G10.1).
+  - G3.6. `status` is an enumeration (G9.4).
+- G4. `Aircraft`: the drone itself.
+  - G4.1. `id`: UUID, primary key. `operator_id`: FK to `Operator`.
+  - G4.2. `manufacturer`, `model`, `registered_on` (date) exist.
+  - G4.3. `serial_number` is unique.
+  - G4.4. `mtom_grams` is the source of the derived weight band (G10.2).
+  - G4.5. `status` is an enumeration (G9.5).
+- G5. `Zone`: a named airspace volume (read-only reference data, G1.2).
+  - G5.1. `code`: text, primary key. `name` exists.
+  - G5.2. `zone_class` is an enumeration (G9.6).
+  - G5.3. `ceiling_metres` exists.
+  - G5.4. `permitted_bands` holds the weight bands that may fly in the zone, from the fixed `C0`-`C3` taxonomy (`docs/06-business-rules.md` §3).
+  - G5.5. `required_authorisation_level` is an enumeration from the same set as `Operator.authorisation_level` (G9.1).
+  - G5.6. `curfew_start` and `curfew_end` (time) exist.
+  - G5.7. `active` (boolean) exists.
+- G6. `FlightRequest`: a single requested flight, the centre of gravity of the system.
+  - G6.1. `id`: UUID, primary key. FKs: `operator_id` to `Operator`, `pilot_id` to `Pilot`, `aircraft_id` to `Aircraft`, `zone_code` to `Zone`.
+  - G6.2. `window_start` is timestamptz, UTC. `window_end` is timestamptz, UTC, and must be after `window_start`.
+  - G6.3. `requested_altitude_metres` exists.
+  - G6.4. `flight_purpose` is free text, capped at 2,000 characters. The cap is enforced in both the API layer and the DB (`char_length` check constraint).
+  - G6.5. `state` is an enumeration defined in `02-state-machine.md`.
+  - G6.6. `rejection_reason` is populated only on rejection.
+  - G6.7. `failing_gate` is populated only on gate-failure rejection; it is an enumeration (G9.7).
+  - G6.8. `rule_reference` is populated only on gate-failure rejection, alongside `failing_gate`. It was added in `0002_flight_request_rule_reference.sql` so that a rejected request's rule citation survives past the original `422` response, per the detail view in `docs/04-frontend-spec.md`.
+  - G6.9. `submitted_at`, `decided_at` and `decided_by` (reviewer identity string) exist.
+- G7. `ReviewAction`: audit record of one reviewer decision.
+  - G7.1. `id`: UUID, primary key. `flight_request_id`: FK to `FlightRequest`. `created_at` exists.
+  - G7.2. `reviewer_id` comes from the `X-Reviewer-Id` header.
+  - G7.3. `action` is an enumeration (G9.8).
+  - G7.4. `note` is required when `action` is `REJECT`.
+- G8. `AuditLog`: record of every state transition, on any entity. Fields: `id` (UUID, primary key), `entity_type` (for example `"FlightRequest"`), `entity_id`, `from_state` (nullable, for creation events), `to_state`, `actor`, `created_at`.
+- G9. Enumerations hold exactly their documented values.
+  - G9.1. `Operator.authorisation_level` (and `Zone.required_authorisation_level`): `L1`, `L2`, `L3`, in ascending privilege.
+  - G9.2. `Operator.status`: `ACTIVE`, `SUSPENDED`.
+  - G9.3. `Pilot.rating`: `R_BASIC`, `R_ADVANCED`, `R_BVLOS`.
+  - G9.4. `Pilot.status`: `ACTIVE`, `INACTIVE`.
+  - G9.5. `Aircraft.status`: `ACTIVE`, `RETIRED`.
+  - G9.6. `Zone.zone_class`: `OPEN`, `CONTROLLED`, `RESTRICTED`.
+  - G9.7. `FlightRequest.failing_gate`: `PILOT`, `AIRCRAFT`, `ZONE`, `TIME_WINDOW`.
+  - G9.8. `ReviewAction.action`: `APPROVE`, `REJECT`.
+- G10. Derived values are computed at read time and never stored. Persisting either one creates a staleness bug the moment its input field is corrected.
+  - G10.1. Pilot currency, derived from `certified_on`: computed at the moment it is checked, and exposed as a derived field on the pilot `GET` endpoint.
+  - G10.2. Aircraft weight band, derived from `mtom_grams`: computed at read time. Correcting a registered mass recalculates the band immediately; flight authorisations already issued are not revisited.
+  - G10.3. The actual thresholds for both are in `docs/06-business-rules.md` §2-§3 (pilot currency: 18 months, `OH-1` §2.3; weight bands: `OH-1` §3).
+- G11. Time handling.
+  - G11.1. `window_start` and `window_end` are stored and compared in UTC.
+  - G11.2. Zone availability (curfew) is defined against local zone time. The conversion from UTC happens at evaluation time, inside the `TIME_WINDOW` gate, never at write time.
 
 ## Risks
-- The document and the migrations drift apart.
-- Pilot currency or weight band gets persisted and becomes stale when its input field (`certified_on`, `mtom_grams`) is corrected.
-- Correcting a registered mass recalculates the weight band immediately, but flight authorisations already issued are not revisited.
-- Curfew is defined against local zone time; converting from UTC at write time instead of at evaluation time gives wrong results.
-- `Operator.id` is the Supabase Auth user id, not a separately generated value; a leftover `user_id` column (from `0003`) or a mismatching `id` breaks the link to `auth.users`.
-- The `flight_purpose` limit is enforced in only one of the two layers.
-- A `rule_reference` is lost after the original `422` response if it is not persisted (the reason `0002` exists).
-- An update or delete path for AuditLog is exposed in the API or the UI.
-- Zone data is written through an ordinary product flow or a create-zone form.
-- A conditional field (`rejection_reason`, `failing_gate`, `rule_reference`) is populated outside the case the document allows.
+
+- R1. The document and the migrations drifting apart (G1.4).
+- R2. `Operator.id` not equal to the Supabase Auth user id (a separately generated value), or the second `user_id` column added by `0003` still present (G2.1).
+- R3. A derived value (pilot currency, weight band) persisted and going stale (G10).
+- R4. An update or delete path exposed for `AuditLog` (G1.3).
+- R5. The `flight_purpose` cap enforced in only one of the API layer and the DB (G6.4).
+- R6. `Zone` written by an ordinary product flow (G1.2).
+- R7. The curfew converted to UTC at write time instead of at evaluation time (G11.2).
+- R8. The rule citation of a rejected request lost after the original `422` response (G6.8).
 
 ## In Scope / Out Of Scope
-**In Scope:**
-- **Entities and fields:** Operator, Pilot, Aircraft, Zone, FlightRequest, ReviewAction, AuditLog, with the fields, keys, constraints and notes listed in Goals.
-- **Enumerations:** the eight enumerations listed in Goals.
-- **Derived, never stored:** pilot currency (from `certified_on`) and aircraft weight band (from `mtom_grams`).
-- **Time handling:** UTC storage and comparison of the flight window; UTC to local zone time conversion at evaluation time, inside the `TIME_WINDOW` gate, never at write time.
-- **Constraints on text:** `flight_purpose` cap of 2,000 characters in both the API layer and the DB.
-- **Append-only and read-only data:** AuditLog (no update or delete path in the API or the UI) and Zone (reference data).
-- **Schema/document sync:** `supabase/migrations/0001_init.sql`, `0002_flight_request_rule_reference.sql`, `0003_operator_auth.sql`, `0004_operators_id_is_auth_user.sql` against this document.
 
-**Out Of Scope** (each item is handed to another document by `01-data-model.md`):
-- The actual thresholds for pilot currency (18 months, `OH-1` §2.3) and weight bands (`OH-1` §3): `docs/06-business-rules.md` §2–§3 (section "Derived, never stored").
-- The `C0`–`C3` weight band taxonomy used by `Zone.permitted_bands`: `docs/06-business-rules.md` §3 (entity "Zone").
-- The FlightRequest `state` values and transitions: `02-state-machine.md` (entity "FlightRequest").
-- Authentication and authorisation of operators: `docs/03-api-contract.md`, "Authentication & authorisation" section (entity "Operator").
-- The detail view of a rejected request: `docs/04-frontend-spec.md` (field `rule_reference`).
-- Populating and editing zones: `supabase/seed.sql` (entity "Zone").
+### In Scope
+
+- The seven entities, their fields, keys, uniqueness and foreign keys (G1-G8)
+- Enumerations and their values (G9)
+- Derived, never stored values (G10)
+- Time handling (G11)
+- Schema and document sync with `supabase/migrations/0001`-`0004` (G1.4)
+
+### Out Of Scope
+
+- Operator login and authorisation behaviour: `01-data-model.md` (entity `Operator`) hands it to `docs/03-api-contract.md`, section "Authentication & authorisation". That document is not part of the input.
+- The values of the pilot currency threshold and the weight band thresholds, and the meaning of the `C0`-`C3` taxonomy: `01-data-model.md` (sections "Derived, never stored" and entity `Zone`) hands them to `docs/06-business-rules.md` §2-§3. That document is not part of the input.
+- The values of `FlightRequest.state`: `01-data-model.md` (entity `FlightRequest`, field `state`) hands them to `02-state-machine.md`. That document is not part of the input.
 
 ## Entry Criteria / Environments
-Entry Criteria:
+
+### Entry Criteria
+
 1. Requirements, test goals are clear for testers
 2. All test environments and test tools are ready and can be used
 3. Test data / test documentation are available and can be used
 4. Test cases are ready and can be used
 
-Environments:
-- OS: Microsoft Windows 11 Pro (10.0.26200)
+### Environments
+
+- OS: Microsoft Windows 11 Pro (version 10.0.26200)
 - Browser: Chrome (latest version)
 
 ## Exit Criteria / Tools
-Exit Criteria:
+
+### Exit Criteria
+
 1. Test time was finished
 2. More than 85% of all test cases were passed
 3. Test Report is ready and can be provided to stakeholders
 
-Tools:
+### Tools
+
 - SVC: GitHub
 - Test design: Claude Code
-- Supabase (database schema and migrations, Supabase Auth)
-- API layer
+- Supabase (Supabase Auth, `auth.users`, migrations `supabase/migrations/0001`-`0004`, `supabase/seed.sql`), as named in the documentation
+- Pilot `GET` endpoint (derived currency status), as named in the documentation
 
 ## Schedule and Estimations / People
-Schedule and Estimations:
-- Start date / End date: [OPEN QUESTION: start and end dates]
-- Analyses and investigation of testing scope: [OPEN QUESTION: estimation]
-- Create Test Documentation (Test Plan and Test Cases): [OPEN QUESTION: estimation]
-- Testing: [OPEN QUESTION: estimation]
-- Create Test Report: [OPEN QUESTION: estimation]
 
-People: Kamila Stopa, Senior Test Engineer
+### Schedule and Estimations
+
+- Start date: [OPEN QUESTION: not provided]
+- End date: [OPEN QUESTION: not provided]
+- Analyses and investigation of testing scope: [OPEN QUESTION: estimation not provided]
+- Create Test Documentation (Test Plan and Test Cases): [OPEN QUESTION: estimation not provided]
+- Testing: [OPEN QUESTION: estimation not provided]
+- Create Test Report: [OPEN QUESTION: estimation not provided]
+
+### People
+
+Kamila Stopa, Senior Test Engineer

@@ -3,132 +3,169 @@
 Project: Skypermit
 Site: https://skypermit.vercel.app/
 
-Source: `../skypermit/docs/03-api-contract.md`
+Source: ../skypermit/docs/03-api-contract.md
 
 ## Introduction
-The API contract defines the REST API under base path `/api/v1` (JSON in, JSON out), implemented as Next.js route handlers under `app/api/v1/...`. It covers the original 16 numbered endpoints (registry, reference data, flight requests, reviewer actions); four authentication endpoints (`POST /operators` as registration, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`) listed without a number, because `POST /operators` is reused as endpoint 1; an extension with `GET /pilots` and `GET /aircraft` list endpoints; the error semantics (`400`, `401`, `403`, `404`, `409`, `422`); and the gate pipeline shared by `submit` and `validate`. The contract originally had no authentication except reviewer endpoints; operators now log in through Supabase Auth (session cookie), while reviewers still do not log in and are identified only by the `X-Reviewer-Id` header, a static identity label, not real authentication.
+
+This plan covers `03-api-contract.md` ("API Contract"): the REST API under base path `/api/v1` (JSON in, JSON out), implemented as Next.js route handlers under `app/api/v1/...`. It covers the original 16 numbered endpoints (registry, reference data, flight requests, reviewer actions); four authentication endpoints (`POST /operators` as registration, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`) listed without a number; the `GET /pilots` and `GET /aircraft` list extension; the error semantics (`400`, `401`, `403`, `404`, `409`, `422`); and the gate pipeline shared by `submit` and `validate`. The contract originally had no authentication except for the reviewer endpoints. Operators now log in through Supabase Auth (session cookie); reviewers still do not log in and are identified only by the `X-Reviewer-Id` header, a static identity label, not real authentication.
 
 ## Goals
-- Verify the authentication endpoints:
-  - `POST /operators`: creates the Supabase Auth user and the Operator profile in one request, then signs the caller in (session cookie). It is the same action as endpoint 1 ("register" and "create an operator").
-  - `POST /auth/login`: logs in with email and password and sets the session cookie.
-  - `POST /auth/logout`: clears the session.
-  - `GET /auth/me`: returns the logged-in operator's profile, or `401`.
-- Verify that the original 16 endpoints keep their numbers 1–16 and the four authentication endpoints stay unnumbered (they were added after the original set was closed; the documentation says not to renumber 1–16 if the contract is regenerated).
-- Verify that registration always creates an operator at `L1` (least privilege) and that `authorisation_level` is not a registration-form field (raising it is an out-of-band admin action).
-- Verify server-derived enforcement: every operator-scoped endpoint (pilots, aircraft, flight-requests create / list / submit / cancel / validate) derives `operator_id` from the session, accepts it neither as a request field nor as a query param, and does not trust a client claim about which operator is acting.
-- Verify that a caller with no session gets `401`, and an authenticated operator reaching for another operator's resource gets `403`.
-- Verify the registry endpoints:
-  - 1 `POST /operators`: register an operator.
-  - 2 `GET /operators/{id}`: retrieve an operator (self, or any reviewer).
-  - 3 `POST /pilots`: register a pilot under the logged-in operator.
-  - 4 `GET /pilots/{id}`: retrieve a pilot including derived currency status (owning operator, or any reviewer).
-  - 5 `POST /aircraft`: register an aircraft under the logged-in operator.
-  - 6 `GET /aircraft/{id}`: retrieve an aircraft including derived weight band (owning operator, or any reviewer).
-- Verify the extension endpoints `GET /pilots` and `GET /aircraft`: they list the logged-in operator's own pilots / aircraft, each row includes the same derived field as the single-entity `GET`, and there is no `operator_id` query param (it was a query param before operator auth existed; scoping now comes from the session).
-- Verify the reference-data endpoints 7 `GET /zones` (list the zone catalogue) and 8 `GET /zones/{code}` (retrieve one zone), and that zones have no create / update endpoints in this API.
-- Verify the flight-request endpoints:
-  - 9 `POST /flight-requests`: creates a request in `DRAFT` under the logged-in operator.
-  - 10 `POST /flight-requests/{id}/submit`: runs all four gates and moves to `UNDER_REVIEW` or `REJECTED` (owning operator only).
-  - 11 `GET /flight-requests/{id}`: owning operator, or any reviewer.
-  - 12 `GET /flight-requests`: list filtered by `state`, `zone_code` and date range.
-  - 13 `POST /flight-requests/{id}/validate`: dry-run (owning operator, or any reviewer).
-  - 14 `POST /flight-requests/{id}/cancel`: cancel, subject to the deadline (owning operator only).
-- Verify reviewer-or-owner reads: `GET` on a single pilot / aircraft / operator / flight-request, and `POST .../validate`, accept either the owning operator's session or any `X-Reviewer-Id` header.
-- Verify list scoping for `GET /flight-requests`: forced to the session's `operator_id` when there is no reviewer header; unscoped (any operator, optional filters) when there is one; a reviewer may also filter by `operator_id`.
-- Verify `validate` (endpoint 13): it runs every gate exactly as `submit` would, in the same order, never changes state, and is cheap and safe to call repeatedly (it backs the frontend's "check before submitting" button and lets the reviewer detail view show all four gate results without side effects). `submit` and `validate` call a single shared gate-pipeline function, with no duplicated gate logic.
-- Verify the reviewer endpoints 15 `POST /flight-requests/{id}/approve` and 16 `POST /flight-requests/{id}/reject` (with a required note): both require `X-Reviewer-Id`, write a `ReviewAction` row and move the request's state (see `02-state-machine.md`); both return `400` if `X-Reviewer-Id` is missing.
-- Verify the six error statuses and their bodies:
-  - `400`: malformed request body (validation detail).
-  - `401`: not authenticated, no operator session and no `X-Reviewer-Id` (error detail).
-  - `403`: authenticated but not permitted for this resource: wrong operator's resource, or the pre-existing `SUSPENDED`-operator precondition (error detail).
-  - `404`: entity not found (no body).
-  - `409`: invalid state transition, or a scheduling conflict between requests (conflict detail).
-  - `422`: business rule violation with the failing gate identified (structured body).
-- Verify the `401` vs `403` distinction (`401` is "who are you", `403` is "I know who you are and it's not allowed") and the `409` vs `422` distinction (`409` means the request cannot be attempted at all, wrong state or scheduling conflict; `422` means it was attempted and a business rule refused it).
-- Verify the `422` body: `failing_gate` (one of `PILOT`, `AIRCRAFT`, `ZONE`, `TIME_WINDOW`), `rule_reference` (document + section, real values from `docs/06-business-rules.md` §6 as corrected by `docs/07-clarifications.md`, used verbatim, never invented) and `message` (human-readable, specific to the failure, written for an operator, not a developer).
-- Verify that the `422` example value `TSD-4 §3.2` is illustrative only and is not returned as a real citation (real examples: `OH-1 §2.1` for a pilot rating that does not cover the zone class; `ZC-2026.1 §2` for an altitude above the zone ceiling).
-- Verify the gate pipeline: fixed order `PILOT`, `AIRCRAFT`, `ZONE`, `TIME_WINDOW`, stopping at the first failure; the response names the first gate that failed.
-- Verify that the weight-band check belongs to the `AIRCRAFT` gate, not `ZONE`, despite the source document's literal wording.
-- Verify that `Operator.status = SUSPENDED` is a separate precondition on the write endpoints, not part of the gate pipeline.
-- [OPEN QUESTION: the document lists the `SUSPENDED`-operator precondition under `403` and refers to `docs/05-open-questions.md` §1 before implementing it; the status code and response body are not defined in this document, and which write endpoints it covers is not listed]
-- [OPEN QUESTION: success status codes and response bodies of the endpoints are not defined]
-- [OPEN QUESTION: request and response field schemas of the endpoints are not defined]
-- [OPEN QUESTION: the document defines `401` as "no operator session and no `X-Reviewer-Id`" but says reviewer endpoints return `400` when `X-Reviewer-Id` is missing; which status applies to a reviewer endpoint called with no session and no header]
-- [OPEN QUESTION: pagination, sort order and query parameter names for the date range filter of `GET /flight-requests` are not defined]
-- [OPEN QUESTION: the `404` body is shown as "—", and the response of `POST /auth/login` for wrong credentials is not defined]
-- [OPEN QUESTION: whether `GET /zones` and `GET /zones/{code}` require a session or reviewer header is not defined]
-- [OPEN QUESTION: the document says `validate` runs every gate "exactly as `submit` would" and the pipeline stops at the first failure, but also says `validate` lets the reviewer detail view show "all four gate results"; whether `validate` reports gates after the first failure is not defined]
+
+Verify that the API behaves as the contract states:
+
+- G1. General.
+  - G1.1. The base path is `/api/v1`.
+  - G1.2. Requests and responses are JSON.
+  - G1.3. The endpoints are implemented as Next.js route handlers under `app/api/v1/...`.
+- G2. Identity model.
+  - G2.1. Operators log in (real login and registration through Supabase Auth, session cookie).
+  - G2.2. Reviewers do not log in: the reviewer identity is the `X-Reviewer-Id` header, a static identity label, not real authentication.
+- G3. Authentication endpoints. They are listed with `—` instead of a number, deliberately, because they were added after the original set of 16 was closed (with explicit sign-off, not guessed).
+  - G3.1. `POST /operators`: register. It creates the Supabase Auth user and the Operator profile in one request, then signs the caller in (session cookie). It doubles as endpoint 1: "register" and "create an operator" are the same action.
+  - G3.2. `POST /auth/login`: log in with email and password; sets the session cookie.
+  - G3.3. `POST /auth/logout`: clear the session.
+  - G3.4. `GET /auth/me`: the logged-in operator's profile, or `401`.
+  - G3.5. The original endpoints keep their numbers 1-16 and the four authentication endpoints stay unnumbered; if the contract is regenerated, the numbers 1-16 are not renumbered to make room.
+- G4. Enforcement is server-derived, not client-supplied.
+  - G4.1. Every operator-scoped endpoint (pilots, aircraft, flight-requests create / list / submit / cancel / validate) derives `operator_id` from the session. None of them accepts it as a request field or a query param, and none trusts a client claim about which operator is acting.
+  - G4.2. A caller with no session gets `401`.
+  - G4.3. An authenticated operator reaching for another operator's resource gets `403`.
+- G5. Reviewer-or-owner reads.
+  - G5.1. `GET` on a single pilot, aircraft, operator or flight-request, and `POST .../validate`, accept either an owning operator's session or any `X-Reviewer-Id` header.
+  - G5.2. `GET /flight-requests` (list) is forced to the session's `operator_id` when there is no reviewer header.
+  - G5.3. `GET /flight-requests` (list) is unscoped (any operator, optional filters) when there is a reviewer header; this is how the reviewer queue works across every operator.
+- G6. `authorisation_level` is no longer self-service.
+  - G6.1. Registration always creates an operator at `L1` (least privilege).
+  - G6.2. Raising the level is an out-of-band admin action, not a registration-form field (`app/api/v1/operators/route.ts`).
+- G7. Registry endpoints.
+  - G7.1. 1 `POST /operators`: register an operator (see G3.1).
+  - G7.2. 2 `GET /operators/{id}`: retrieve an operator (self, or any reviewer).
+  - G7.3. 3 `POST /pilots`: register a pilot under the logged-in operator.
+  - G7.4. 4 `GET /pilots/{id}`: retrieve a pilot, including derived currency status (owning operator, or any reviewer).
+  - G7.5. 5 `POST /aircraft`: register an aircraft under the logged-in operator.
+  - G7.6. 6 `GET /aircraft/{id}`: retrieve an aircraft, including derived weight band (owning operator, or any reviewer).
+- G8. Extension beyond the original 16: list endpoints, added with explicit sign-off.
+  - G8.1. `GET /pilots` and `GET /aircraft` list the logged-in operator's own pilots / aircraft.
+  - G8.2. Each row includes the same derived field as the single-entity `GET`.
+  - G8.3. There is no `operator_id` query param (it was a query param before operator auth existed; scoping now comes from the session).
+  - G8.4. If the contract is regenerated from a source document, these list endpoints are folded in rather than dropped.
+- G9. Reference data.
+  - G9.1. 7 `GET /zones`: list the zone catalogue.
+  - G9.2. 8 `GET /zones/{code}`: retrieve one zone.
+  - G9.3. Zones have no create or update endpoints in this API; they are managed as reference data.
+- G10. Flight request endpoints.
+  - G10.1. 9 `POST /flight-requests`: create a request in `DRAFT`, under the logged-in operator.
+  - G10.2. 10 `POST /flight-requests/{id}/submit`: run all four gates; move to `UNDER_REVIEW` or `REJECTED` (owning operator only).
+  - G10.3. 11 `GET /flight-requests/{id}`: retrieve a request (owning operator, or any reviewer).
+  - G10.4. 12 `GET /flight-requests`: list, filtered by `state`, `zone_code`, date range, scoped to the logged-in operator; a reviewer instead gets every operator and may also filter by `operator_id`.
+  - G10.5. 13 `POST /flight-requests/{id}/validate`: dry-run all gates without changing state (owning operator, or any reviewer).
+  - G10.6. 14 `POST /flight-requests/{id}/cancel`: cancel, subject to the deadline (owning operator only).
+- G11. `validate` (endpoint 13).
+  - G11.1. It runs every gate exactly as `submit` would, in the same order.
+  - G11.2. It never changes state.
+  - G11.3. The gate pipeline is a single shared function that both `submit` and `validate` call; the gate logic is not duplicated between them.
+  - G11.4. It exists so that the frontend's "check before submitting" button is cheap and safe to call repeatedly, and so that the reviewer detail view can show all four gate results without side effects.
+- G12. Reviewer endpoints (require `X-Reviewer-Id`).
+  - G12.1. 15 `POST /flight-requests/{id}/approve`: approve a request under review.
+  - G12.2. 16 `POST /flight-requests/{id}/reject`: reject a request under review, with a required note.
+  - G12.3. Both write a `ReviewAction` row and move the request's state (see `02-state-machine.md`).
+  - G12.4. Both return `400` if `X-Reviewer-Id` is missing.
+- G13. Error semantics: six statuses carry meaning (four originally, plus `401` and `403` added alongside operator auth). [OPEN QUESTION: the document defines `401` as "no operator session and no `X-Reviewer-Id`" and also says reviewer endpoints return `400` when `X-Reviewer-Id` is missing; which status applies to a reviewer endpoint called with no session and no header]
+  - G13.1. `409` means the request cannot be attempted at all (wrong state, scheduling conflict); `422` means it was attempted and a business rule refused it.
+  - G13.2. `401` is "who are you" (no session, no reviewer header); `403` is "I know who you are and it is not allowed" (wrong operator's resource, or the `SUSPENDED`-operator precondition, see G15.5).
+  - G13.3. `400`: malformed request body; the body carries validation detail.
+  - G13.4. `401`: not authenticated (no operator session and no `X-Reviewer-Id`); the body carries error detail.
+  - G13.5. `403`: authenticated, but not permitted for this resource; the body carries error detail.
+  - G13.6. `404`: entity not found; no body is specified.
+  - G13.7. `409`: invalid state transition, or a scheduling conflict between requests; the body carries conflict detail.
+  - G13.8. `422`: business rule violation, with the failing gate identified; the body is structured (G14).
+- G14. The `422` body names the gate that failed and cites the rule that governed the decision, so a rejection can be traced back to its source.
+  - G14.1. `failing_gate` is one of `PILOT`, `AIRCRAFT`, `ZONE`, `TIME_WINDOW`; gates evaluate in that order and the response names the first gate that failed.
+  - G14.2. `rule_reference` is the document and section responsible for the rule. The real values are in `docs/06-business-rules.md` §6 (as corrected by `docs/07-clarifications.md`) and are used verbatim, not invented.
+  - G14.3. `message` is human-readable, specific to the failure, written for an operator, not for a developer.
+  - G14.4. The example `TSD-4 §3.2` in the contract is illustrative only and is not one of the real citations. Real values are, for example, `OH-1 §2.1` for a pilot rating that does not cover the zone class and `ZC-2026.1 §2` for an altitude that exceeds the zone ceiling.
+- G15. Gate pipeline (shared by `submit` and `validate`).
+  - G15.1. The gates are evaluated in a fixed order: 1. `PILOT`, 2. `AIRCRAFT`, 3. `ZONE`, 4. `TIME_WINDOW`.
+  - G15.2. Evaluation stops at the first failure.
+  - G15.3. All four gates are fully specified in `docs/06-business-rules.md` as corrected by `docs/07-clarifications.md`.
+  - G15.4. The weight-band check belongs to `AIRCRAFT`, not `ZONE`, despite the literal wording of the source document.
+  - G15.5. `Operator.status = SUSPENDED` is a separate precondition on the write endpoints themselves, not part of this pipeline. [OPEN QUESTION: the status code and response body for a blocked suspended operator are not defined in this document]
+- G16. [OPEN QUESTION: the request body fields, required and optional, of the `POST` endpoints and the success status codes of all endpoints are not stated in this document]
+- G17. [OPEN QUESTION: whether `GET /zones` and `GET /zones/{code}` require a session or an `X-Reviewer-Id` header is not stated; the contract states `401` for operator-scoped endpoints only]
 
 ## Risks
-- The 16 original endpoints are renumbered or confused with the unnumbered authentication endpoints, so "endpoint 9" means different things in different versions of the document.
-- A client-supplied `operator_id` (request field or query param) is accepted, or a client claim about the acting operator is trusted (authentication theatre).
-- `401` and `403` are mixed up (no session or reviewer header vs. wrong operator's resource / `SUSPENDED` operator).
-- `409` and `422` are mixed up (cannot be attempted vs. attempted and refused by a business rule).
-- A registration form can set `authorisation_level`, or registration creates an operator above `L1`.
-- A reviewer header grants reviewer access to endpoints that are owner-only (`submit`, `cancel`), or a reviewer cannot read another operator's data where the contract says they can.
-- `GET /flight-requests` leaks other operators' requests to a caller without a reviewer header.
-- `validate` changes state, or its gate logic diverges from `submit` because the pipeline is duplicated.
-- Gates are evaluated in the wrong order, or the response names a later gate instead of the first one that failed.
-- The weight-band check is evaluated in the `ZONE` gate instead of `AIRCRAFT`, following the source document's literal wording.
-- A `422` cites an invented or illustrative `rule_reference` (`TSD-4 §3.2`) instead of the real citation, or the message is written for a developer.
-- Reviewer endpoints work without `X-Reviewer-Id` instead of returning `400`.
-- The `X-Reviewer-Id` header is a static identity label, not real authentication, so any caller can supply it.
-- A `SUSPENDED` operator can use write endpoints; the handling of this precondition depends on `docs/05-open-questions.md` §1.
-- Zones can be created or updated through the API.
-- The contract is regenerated and the `GET /pilots` / `GET /aircraft` extension is dropped.
+
+- R1. `operator_id` taken from a request field, a query param or a client claim instead of the session (G4.1, G8.3).
+- R2. An operator reading or changing another operator's resource instead of getting `403` (G4.3).
+- R3. `401` and `403` confused, or `409` and `422` confused (G13.1, G13.2).
+- R4. `validate` changing state, or the gate logic duplicated between `submit` and `validate` so the two diverge (G11).
+- R5. Reviewer endpoints working without `X-Reviewer-Id` instead of returning `400` (G12.4).
+- R6. The reviewer list not unscoped, or the operator list not scoped to the session (G5.2, G5.3, G10.4).
+- R7. `authorisation_level` settable through registration instead of always starting at `L1` (G6).
+- R8. `rule_reference` values invented instead of taken verbatim from `docs/06-business-rules.md` §6 (G14.2).
+- R9. A gate failure reported for a later gate instead of the first failing gate (G14.1, G15.2).
+- R10. The weight-band check implemented under `ZONE` (G15.4).
+- R11. A suspended operator's blocked request returned as a `422` with a `failing_gate` (G15.5).
+- R12. Renumbering endpoints 1-16 when the contract is regenerated (G3.5).
 
 ## In Scope / Out Of Scope
-**In Scope:**
-- **Base path and format:** `/api/v1`, JSON in, JSON out; Next.js route handlers under `app/api/v1/...`.
-- **Authentication & authorisation:** `POST /operators` (register), `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`; session cookie; reviewers identified only by `X-Reviewer-Id`; server-derived `operator_id`; `401` / `403` enforcement; reviewer-or-owner reads; `GET /flight-requests` list scoping; registration at `L1`.
-- **Registry (endpoints 1–6):** operators, pilots (with derived currency status), aircraft (with derived weight band).
-- **Extension:** `GET /pilots` and `GET /aircraft` for the logged-in operator.
-- **Reference data (endpoints 7–8):** `GET /zones`, `GET /zones/{code}`; no create / update endpoints.
-- **Flight requests (endpoints 9–14):** create, submit, get, list (filters `state`, `zone_code`, date range, `operator_id` for reviewers), validate, cancel.
-- **Reviewer (endpoints 15–16):** approve, reject with required note; `ReviewAction` row; `400` without `X-Reviewer-Id`.
-- **Error semantics:** statuses `400`, `401`, `403`, `404`, `409`, `422` and their meanings; `422` body (`failing_gate`, `rule_reference`, `message`).
-- **Gate pipeline:** order `PILOT`, `AIRCRAFT`, `ZONE`, `TIME_WINDOW`; stops at the first failure; shared by `submit` and `validate`; `SUSPENDED` operator as a separate precondition on write endpoints.
 
-**Out Of Scope** (each item is handed to another document by `03-api-contract.md`):
-- Gate rules in detail (what each gate checks) and the real `rule_reference` values: `docs/06-business-rules.md` and `docs/07-clarifications.md`, per "The `422` body" and "Gate pipeline".
-- State transitions behind approve / reject (and the state machine in general): `02-state-machine.md`, per "Reviewer — requires `X-Reviewer-Id`".
-- The `SUSPENDED`-operator precondition details: `docs/05-open-questions.md` §1, per "Gate pipeline".
-- The frontend usage of these endpoints (registry list, pickers, queue detail view): `docs/04-frontend-spec.md`, per "Registry" and "Authentication & authorisation".
-- The gate implementation status and the weight-band explanation: `CLAUDE.md` of the application, per "Gate pipeline".
-- Zone data management: `supabase/seed.sql` and `supabase/SETUP.md`, per "Reference data".
-- The operator registration handler `app/api/v1/operators/route.ts`, per "Authentication & authorisation" (`authorisation_level` is no longer self-service).
+### In Scope
+
+- The authentication endpoints and the identity model (G2, G3, G6)
+- Server-derived enforcement and reviewer-or-owner reads (G4, G5)
+- Registry, extension, reference-data, flight-request and reviewer endpoints (G7-G12)
+- Error semantics and the `422` body (G13, G14)
+- Gate pipeline order and sharing (G15, G11)
+
+### Out Of Scope
+
+- The gate rules themselves: `03-api-contract.md` (section "Gate pipeline") says they are fully specified in `docs/06-business-rules.md` as corrected by `docs/07-clarifications.md`. Those documents are not part of the input.
+- The behaviour of a `SUSPENDED` operator: `03-api-contract.md` (section "Gate pipeline", last paragraph, and "Error semantics") hands it to `docs/05-open-questions.md` §1. That document is not part of the input.
+- The full explanation of why the weight-band check belongs to `AIRCRAFT`: `03-api-contract.md` (section "Gate pipeline") hands it to the "gate implementation status" section of `CLAUDE.md`. That file is not part of the input.
+- Management of zone reference data: `03-api-contract.md` (section "Reference data") hands it to `supabase/seed.sql` and `supabase/SETUP.md`. Those files are not part of the input.
 
 ## Entry Criteria / Environments
-Entry Criteria:
+
+### Entry Criteria
+
 1. Requirements, test goals are clear for testers
 2. All test environments and test tools are ready and can be used
 3. Test data / test documentation are available and can be used
 4. Test cases are ready and can be used
 
-Environments:
-- OS: Microsoft Windows 11 Pro (10.0.26200)
+### Environments
+
+- OS: Microsoft Windows 11 Pro (version 10.0.26200)
 - Browser: Chrome (latest version)
 
 ## Exit Criteria / Tools
-Exit Criteria:
+
+### Exit Criteria
+
 1. Test time was finished
 2. More than 85% of all test cases were passed
 3. Test Report is ready and can be provided to stakeholders
 
-Tools:
+### Tools
+
 - SVC: GitHub
 - Test design: Claude Code
-- REST API (`/api/v1`, JSON)
-- Next.js route handlers
-- Supabase Auth (session cookie)
+- REST API under `/api/v1` (JSON), Next.js route handlers, as named in the documentation
+- Supabase Auth (session cookie), as named in the documentation
+- `X-Reviewer-Id` header
 
 ## Schedule and Estimations / People
-Schedule and Estimations:
-- Start date / End date: [OPEN QUESTION: start and end dates]
-- Analyses and investigation of testing scope: [OPEN QUESTION: estimation]
-- Create Test Documentation (Test Plan and Test Cases): [OPEN QUESTION: estimation]
-- Testing: [OPEN QUESTION: estimation]
-- Create Test Report: [OPEN QUESTION: estimation]
 
-People: Kamila Stopa, Senior Test Engineer
+### Schedule and Estimations
+
+- Start date: [OPEN QUESTION: not provided]
+- End date: [OPEN QUESTION: not provided]
+- Analyses and investigation of testing scope: [OPEN QUESTION: estimation not provided]
+- Create Test Documentation (Test Plan and Test Cases): [OPEN QUESTION: estimation not provided]
+- Testing: [OPEN QUESTION: estimation not provided]
+- Create Test Report: [OPEN QUESTION: estimation not provided]
+
+### People
+
+Kamila Stopa, Senior Test Engineer

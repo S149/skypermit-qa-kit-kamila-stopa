@@ -15,11 +15,19 @@ Verify that behaviour matches the clarifications recorded here:
 
 - G1. Authority: where a clarification here conflicts with the literal wording of `docs/06-business-rules.md`, this addendum governs; it is a correction, not a competing interpretation. `docs/06-business-rules.md` has been updated to match.
 - G2. Status: current status (resolved vs. open) is in `docs/05-open-questions.md`, the canonical table. This file only explains why each item was decided; it is not updated again if a status changes, so its wording is not the live answer.
-- G3. Item 1, the `AIRCRAFT` gate: failing the `AIRCRAFT` gate means the weight-band check, the aircraft's derived weight band against the zone's `permitted_bands`. It is a real gate check, not a stub.
-- G4. Item 1, reassignment: this rule had been placed under `ZONE` in `docs/06-business-rules.md` §1.3 (sourced from `ZC-2026.1` §2, whose text literally says "fails the zone gate"). That placement was a corpus error in `ZC-2026.1` §2, not a trap or a second valid reading. The rule is unchanged and still cites `ZC-2026.1 §2`; only the gate changed. It is implemented in `lib/gates/aircraft-gate.ts`, not `lib/gates/zone-gate.ts`.
+- G3. Item 1, the `AIRCRAFT` gate.
+  - G3.1. Failing the `AIRCRAFT` gate means the weight-band check: the aircraft's derived weight band against the zone's `permitted_bands`.
+  - G3.2. It is a real gate check, not a stub.
+- G4. Item 1, reassignment: this rule had been placed under `ZONE` in `docs/06-business-rules.md` §1.3 (sourced from `ZC-2026.1` §2, whose text literally says "fails the zone gate").
+  - G4.1. That placement was a corpus error in `ZC-2026.1` §2, not a trap or a second valid reading.
+  - G4.2. The rule is unchanged and still cites `ZC-2026.1 §2`; only the gate changed.
+  - G4.3. It is implemented in `lib/gates/aircraft-gate.ts`, not `lib/gates/zone-gate.ts`.
 - G5. Item 2: `Aircraft.status = RETIRED` / `Pilot.status = INACTIVE`. Resolved as "no": nothing ties either field to a gate outcome. Both are left unwired, and no check is inferred from the pattern of the gates that are defined.
 - G6. Item 3, `Operator.status = SUSPENDED`: it is a precondition on the write operations themselves (create / submit / approve), not a gate outcome.
-- G7. Item 3, response: it must not be represented as a `422` with a `failing_gate`, because none of `PILOT`, `AIRCRAFT`, `ZONE`, `TIME_WINDOW` fits. The status code and response body for a suspended operator's blocked request are undefined, and an answer is needed before `POST /flight-requests`, `.../submit` or `.../approve` can handle a suspended operator correctly. `422` is not a default to make it fit. [OPEN QUESTION: the status code and response body for a suspended operator's blocked request]
+- G7. Item 3, response.
+  - G7.1. It must not be represented as a `422` with a `failing_gate`, because none of `PILOT`, `AIRCRAFT`, `ZONE`, `TIME_WINDOW` fits.
+  - G7.2. The status code and response body for a suspended operator's blocked request are undefined, and an answer is needed before `POST /flight-requests`, `.../submit` or `.../approve` can handle a suspended operator correctly. [OPEN QUESTION: the status code and response body for a suspended operator's blocked request]
+  - G7.3. `422` is not used as a default to make it fit the existing shape; the question is raised rather than guessed.
 - G8. Item 4, altitude vs. ceiling → `ZONE`: confirmed as originally documented.
 - G9. Item 4, operator authorisation level → `ZONE`: confirmed, citing `OH-1 §4`. No longer "inferred"; it has the same confidence as the explicit rows.
 - G10. Item 4, weight band → `AIRCRAFT`, not `ZONE`: moved per item 1. It was misplaced rather than merely under-cited.

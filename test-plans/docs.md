@@ -6,177 +6,627 @@ Site: https://skypermit.vercel.app/
 Source: `../skypermit/docs/` (`01-data-model.md`, `02-state-machine.md`, `03-api-contract.md`, `04-frontend-spec.md`, `05-open-questions.md`, `06-business-rules.md`, `07-clarifications.md`, `08-uml-diagrams.md`)
 
 ## Introduction
+
 Skypermit is an application for requesting and approving drone flights. Operators register and log in (Supabase Auth, session cookie), register their pilots and aircraft, and create flight requests in a zone and time window. A request is checked by a fixed pipeline of four gates (`PILOT`, `AIRCRAFT`, `ZONE`, `TIME_WINDOW`), after which it goes to a reviewer queue where a reviewer (identified only by the `X-Reviewer-Id` header, not a login) approves or rejects it. The documentation describes seven entities (Operator, Pilot, Aircraft, Zone, FlightRequest, ReviewAction, AuditLog), a seven-state request lifecycle, a REST API under `/api/v1` (16 numbered endpoints; authentication endpoints unnumbered, with `POST /operators` doubling as registration and endpoint 1; `GET /pilots` and `GET /aircraft` added later), a two-role frontend (operator portal and reviewer queue) with a `data-testid` contract, and the business rules behind each gate. `06-business-rules.md` is a compilation of rules from source documents (`OH-1` v2.0, `ZC-2026.1` as amended by `A-7`, `TSD-4`, `API-REF`) and is a companion to a document called "SkyPermit — System Reference" (which defines persisted fields, states, endpoints and response contracts but excludes decision logic). It reflects the corpus as of the dates of its sources: `TSD-4` and `ZC-2026.1` effective 2026-01-01, `A-7` effective 2026-02-10, `OH-1` v2.0 effective 2026-01-15. `07-clarifications.md` records the rules owner's answers and governs where it conflicts with the literal wording of `06-business-rules.md`; `05-open-questions.md` is the canonical status of open questions. `08-uml-diagrams.md` is derived from `01-data-model.md` and `02-state-machine.md`; if they disagree, those two are the source of truth. This plan covers the whole application as described in all eight documents.
 
 ## Goals
-**Data model (`01-data-model.md`)**
-- Verify that the schema matches the documented entities (Operator, Pilot, Aircraft, Zone, FlightRequest, ReviewAction, AuditLog), fields, primary keys, foreign keys, uniqueness constraints and enumerations, and that the document and the migrations (`0001_init.sql`, `0002_flight_request_rule_reference.sql`, `0003_operator_auth.sql`, `0004_operators_id_is_auth_user.sql`) stay in sync.
-- Verify that `Operator.id` is the Supabase Auth user's id (UUID, FK to `auth.users(id)`, on delete cascade), with no separate `user_id` column.
-- Verify the entity fields: Operator (`legal_name`, `national_id`, `email`, `phone`, `address_line`, `city`, `postal_code`, `authorisation_level`, `registered_on`, `status`); Pilot (`operator_id`, `full_name`, `national_id`, `rating`, `certified_on`, `status`); Aircraft (`operator_id`, `manufacturer`, `model`, `serial_number`, `mtom_grams`, `registered_on`, `status`); Zone (`code` text primary key, `name`, `zone_class`, `ceiling_metres`, `permitted_bands`, `required_authorisation_level`, `curfew_start`, `curfew_end`, `active`); FlightRequest (`operator_id`, `pilot_id`, `aircraft_id`, `zone_code`, `window_start`, `window_end`, `requested_altitude_metres`, `flight_purpose`, `state`, `rejection_reason`, `failing_gate`, `rule_reference`, `submitted_at`, `decided_at`, `decided_by`); ReviewAction (`flight_request_id`, `reviewer_id` from the `X-Reviewer-Id` header, `action`, `note`, `created_at`); AuditLog (`entity_type`, `entity_id`, `from_state`, `to_state`, `actor`, `created_at`).
-- Verify uniqueness of `Operator.national_id`, `Operator.email`, `Pilot.national_id` and `Aircraft.serial_number`.
-- Verify the enumerations: `Operator.authorisation_level` (`L1`, `L2`, `L3`, ascending privilege), `Operator.status` (`ACTIVE`, `SUSPENDED`), `Pilot.rating` (`R_BASIC`, `R_ADVANCED`, `R_BVLOS`), `Pilot.status` (`ACTIVE`, `INACTIVE`), `Aircraft.status` (`ACTIVE`, `RETIRED`), `Zone.zone_class` (`OPEN`, `CONTROLLED`, `RESTRICTED`), `Zone.required_authorisation_level` (same set as `Operator.authorisation_level`), `FlightRequest.failing_gate` (`PILOT`, `AIRCRAFT`, `ZONE`, `TIME_WINDOW`), `ReviewAction.action` (`APPROVE`, `REJECT`).
-- Verify the conditional rules: `rejection_reason` populated only on rejection; `failing_gate` and `rule_reference` populated only on gate-failure rejection, together; `ReviewAction.note` required when `action` is `REJECT`; `AuditLog.from_state` nullable for creation events; `window_end` after `window_start`.
-- Verify that `rule_reference` is persisted on the FlightRequest (`0002`), so the citation survives past the original `422` response.
-- Verify that pilot currency and aircraft weight band are derived at read time and never stored; correcting `mtom_grams` recalculates the band immediately and does not revisit flight authorisations already issued; pilot currency is exposed as a derived field on the pilot `GET` endpoint.
-- Verify that `window_start` / `window_end` are stored and compared in UTC and the UTC-to-zone-local conversion for curfew happens at evaluation time inside the `TIME_WINDOW` gate, never at write time (there is no stored "curfew in UTC" value to drift out of sync with the zone record).
-- Verify that `flight_purpose` is free text limited to 2,000 characters in both the API layer and the DB (`char_length` check constraint).
-- Verify that Zone is read-only reference data (populated outside ordinary app flows, `supabase/seed.sql`, no create-zone form) and that AuditLog is append-only with no update or delete path in the API or the UI.
-- [OPEN QUESTION: `01-data-model.md` says `failing_gate` and `rule_reference` are populated only on gate-failure rejection, but `02-state-machine.md` says `REJECTED` (including refusal by a reviewer) has `failing_gate` and `rejection_reason` populated, and `08-uml-diagrams.md` says `failing_gate` + `rejection_reason` (+ `rule_reference`) are populated on gate failure; what is `failing_gate` after a reviewer rejection]
-- [OPEN QUESTION: `01-data-model.md` gives no data type, format, length limit or nullability for fields other than `flight_purpose`; whether `ReviewAction.note` is allowed on `APPROVE`; when `submitted_at`, `decided_at` and `decided_by` are populated; how `permitted_bands` is stored]
 
-**State machine (`02-state-machine.md`)**
-- Verify that a `FlightRequest` is in exactly one of seven states (`DRAFT`, `SUBMITTED`, `UNDER_REVIEW`, `APPROVED`, `REJECTED`, `CANCELLED`, `COMPLETED`) at any time, and that the diagram and the transition table agree.
-- Verify every legal transition: `DRAFT`→submit→`SUBMITTED`→`UNDER_REVIEW` (gates pass, automatic) or `REJECTED` (gates fail, automatic); `UNDER_REVIEW`→approve→`APPROVED` (reviewer-only, writes a `ReviewAction` row); `UNDER_REVIEW`→reject→`REJECTED` (reviewer-only, `note` required); `APPROVED`→complete→`COMPLETED` (maintenance endpoint only); cancel from `DRAFT`, `SUBMITTED`, `UNDER_REVIEW` and `APPROVED`.
-- Verify that every `(from, action)` pair not listed returns `409`, including `submit` from `UNDER_REVIEW` and any transition out of the terminal states `REJECTED`, `CANCELLED`, `COMPLETED` (`DRAFT`, `SUBMITTED`, `UNDER_REVIEW`, `APPROVED` are non-terminal).
-- Verify that `SUBMITTED` is never observed at rest (gates run synchronously inside submit), that gate pass / fail are automatic outcomes and not caller-invoked actions, and that no gates have run for a `DRAFT`.
-- Verify that `COMPLETED` is set only by the maintenance completion endpoint and never inferred from elapsed time.
-- Verify the cancellation deadline: cancelling an `APPROVED` request is allowed only up to 2 hours before `window_start`; closer than that, the cancel endpoint returns `409` (a state-transition rejection, not a gate failure; source `TSD-4 §6` via `06-business-rules.md` §5).
-- Verify the aircraft schedule overlap check counts only `APPROVED` and `UNDER_REVIEW` requests (`DRAFT`, `REJECTED`, `CANCELLED`, `COMPLETED` are invisible to it), so a request that passed `validate` can still fail at `submit` if another request for the same aircraft was approved in the interim (expected behaviour).
-- Verify that every write to `FlightRequest.state` goes through one place in the code and every state change is also logged by the database trigger (`0001_init.sql`).
-- [OPEN QUESTION: `02-state-machine.md` says the aircraft overlap check runs inside the `AIRCRAFT` / `TIME_WINDOW` gates, while `06-business-rules.md` §1.4 places it only in `TIME_WINDOW` (and `06-business-rules.md` §1.2 lists no overlap rule under `AIRCRAFT`); which `failing_gate` is returned for an overlap]
-- [OPEN QUESTION: `06-business-rules.md` §5 says a cancellation attempted closer than 2 hours before `window_start` is rejected and "the request must proceed or be handled by reviewer action instead", but `02-state-machine.md` has no reviewer action on an `APPROVED` request (approve / reject exist only from `UNDER_REVIEW`); what reviewer action is meant]
-- [OPEN QUESTION: `02-state-machine.md` and `08-uml-diagrams.md` say `SUBMITTED` → cancel is possible "in a narrow window" and also that `SUBMITTED` is never observed at rest; how can this transition be exercised in a test]
-- [OPEN QUESTION: the maintenance completion endpoint (path, method, caller) and the behaviour at exactly 2 hours before `window_start` are not defined; `03-api-contract.md` gives the `409` body only as "conflict detail", with no structure]
+Verify the whole application as the eight documents describe it. The first number of every goal is the number of the document (`G1` is `01-data-model.md`, `G8` is `08-uml-diagrams.md`); a gap or a conflict between documents is recorded as an open question next to the goal it concerns.
 
-**API contract (`03-api-contract.md`)**
-- Verify the base path `/api/v1` (JSON in, JSON out, Next.js route handlers under `app/api/v1/...`).
-- Verify the authentication endpoints (`POST /operators`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me` returning the profile or `401`), that registration creates the Supabase Auth user and the Operator profile in one request and signs the caller in, and that the original endpoints keep numbers 1–16 with authentication endpoints unnumbered.
-- Verify that registration always creates an operator at `L1` and `authorisation_level` is not self-service.
-- Verify server-derived enforcement: operator-scoped endpoints derive `operator_id` from the session, accept it neither as request field nor query param, and never trust a client claim about the acting operator; no session gives `401`, another operator's resource gives `403`.
-- Verify all 16 numbered endpoints: `POST /operators`, `GET /operators/{id}`, `POST /pilots`, `GET /pilots/{id}` (with derived currency), `POST /aircraft`, `GET /aircraft/{id}` (with derived weight band), `GET /zones`, `GET /zones/{code}`, `POST /flight-requests`, `POST /flight-requests/{id}/submit`, `GET /flight-requests/{id}`, `GET /flight-requests` (filters `state`, `zone_code`, date range), `POST /flight-requests/{id}/validate`, `POST /flight-requests/{id}/cancel`, `POST /flight-requests/{id}/approve`, `POST /flight-requests/{id}/reject`.
-- Verify `GET /pilots` and `GET /aircraft` list only the logged-in operator's own records, each row with the same derived field as the single-entity `GET`, with no `operator_id` query param.
-- Verify reviewer-or-owner reads (single `GET` of pilot / aircraft / operator / flight-request, and `validate`) and list scoping of `GET /flight-requests` (forced to the session's operator without reviewer header; unscoped, with optional filters including `operator_id`, when a reviewer header is present); owner-only endpoints (`submit`, `cancel`).
-- Verify that zones have no create / update endpoints.
-- Verify that `validate` runs every gate exactly as `submit` would, in the same order, never changes state, and that both call one shared gate-pipeline function.
-- Verify that approve and reject require `X-Reviewer-Id` (`400` if missing), write a `ReviewAction` row and move the state; reject requires a note.
-- Verify the error statuses `400`, `401`, `403`, `404`, `409`, `422` and their meanings (`401`: no session and no reviewer header; `403`: wrong operator's resource, and, per `03-api-contract.md`, the `SUSPENDED`-operator precondition; `409`: cannot be attempted at all; `422`: attempted and refused by a business rule).
-- Verify the `422` body: `failing_gate`, `rule_reference` (real values only, verbatim, never invented; `TSD-4 §3.2` in the contract example is illustrative only) and `message` (specific, written for an operator).
-- [OPEN QUESTION: `03-api-contract.md` defines every `422` as naming a failing gate, but `06-business-rules.md` §1.2 and §3 say an aircraft above 30,000 g is refused with `422` at registration as a non-gate precondition (`rule_reference` `OH-1 §3`); what body does that `422` carry]
-- [OPEN QUESTION: `03-api-contract.md` lists the `SUSPENDED`-operator precondition under `403`, while `05-open-questions.md` §1 and `07-clarifications.md` item 3 say its status code and body are undefined (`403` only a proposed placeholder); what must be returned. Also, `03-api-contract.md` says "write endpoints" while `05-open-questions.md` §1 and `07-clarifications.md` item 3 name create / submit / approve; which endpoints are covered, and whose status applies to `approve`, which is a reviewer action]
-- [OPEN QUESTION: `03-api-contract.md` defines `401` as "no operator session and no `X-Reviewer-Id`" but says reviewer endpoints return `400` when `X-Reviewer-Id` is missing; which status applies when there is neither a session nor a header on a reviewer endpoint]
-- [OPEN QUESTION: `03-api-contract.md` and `06-business-rules.md` say gates stop at the first failure and `validate` runs the pipeline exactly as `submit` would, but `03-api-contract.md` and `04-frontend-spec.md` say the reviewer detail view shows "all four gate results" and the operator sees "per-gate pass/fail" from `validate`, and `08-uml-diagrams.md` says `validate` returns per-gate results; are gates after the first failure reported]
-- [OPEN QUESTION: success status codes and bodies are not defined (`08-uml-diagrams.md` says only "200/201"); request/response field schemas, pagination, sort order and the date-range parameter names of `GET /flight-requests`, the `404` body, the login failure response, and whether the zone endpoints require a session or header are not defined]
+- G1. Data model (`01-data-model.md`).
+  - G1.1. General rules of the model.
+    - G1.1.1. There are seven entities: `Operator`, `Pilot`, `Aircraft`, `Zone`, `FlightRequest`, `ReviewAction`, `AuditLog`.
+    - G1.1.2. `Zone` is read-only reference data, not written by ordinary product flows. It is populated outside the app (`supabase/seed.sql`), not through a create-zone form.
+    - G1.1.3. `AuditLog` is append-only: no update or delete path is exposed, in the API or in the UI.
+    - G1.1.4. The schema in `supabase/migrations/0001_init.sql` and the additive migrations `0002_flight_request_rule_reference.sql`, `0003_operator_auth.sql`, `0004_operators_id_is_auth_user.sql` match `01-data-model.md`; if one changes, the other changes. [OPEN QUESTION: which fields are required or nullable, and which have default values, is not stated except where a field is described as nullable or populated only in some case]
+  - G1.2. `Operator`: the account under which everything else is registered. Operators log in through Supabase Auth.
+    - G1.2.1. `id`: UUID, primary key, FK to `auth.users(id)` on delete cascade. It is set at registration to the Supabase Auth user's own id, so the operator row is keyed by its auth identity and is not a separately generated value. `0003_operator_auth.sql` added a second `user_id` column; `0004_operators_id_is_auth_user.sql` collapsed the two back into `id` alone.
+    - G1.2.2. `legal_name`, `phone`, `address_line`, `city`, `postal_code`, `registered_on` (date) exist.
+    - G1.2.3. `national_id` is unique.
+    - G1.2.4. `email` is unique.
+    - G1.2.5. `authorisation_level` is an enumeration (G1.9.1).
+    - G1.2.6. `status` is an enumeration (G1.9.2).
+  - G1.3. `Pilot`: a certified person, registered under one operator.
+    - G1.3.1. `id`: UUID, primary key. `operator_id`: FK to `Operator`.
+    - G1.3.2. `full_name` exists.
+    - G1.3.3. `national_id` is unique.
+    - G1.3.4. `rating` is an enumeration (G1.9.3).
+    - G1.3.5. `certified_on` (date) is the source of the derived currency status (G1.10.1).
+    - G1.3.6. `status` is an enumeration (G1.9.4).
+  - G1.4. `Aircraft`: the drone itself.
+    - G1.4.1. `id`: UUID, primary key. `operator_id`: FK to `Operator`.
+    - G1.4.2. `manufacturer`, `model`, `registered_on` (date) exist.
+    - G1.4.3. `serial_number` is unique.
+    - G1.4.4. `mtom_grams` is the source of the derived weight band (G1.10.2).
+    - G1.4.5. `status` is an enumeration (G1.9.5).
+  - G1.5. `Zone`: a named airspace volume (read-only reference data, G1.1.2).
+    - G1.5.1. `code`: text, primary key. `name` exists.
+    - G1.5.2. `zone_class` is an enumeration (G1.9.6).
+    - G1.5.3. `ceiling_metres` exists.
+    - G1.5.4. `permitted_bands` holds the weight bands that may fly in the zone, from the fixed `C0`-`C3` taxonomy (`docs/06-business-rules.md` §3).
+    - G1.5.5. `required_authorisation_level` is an enumeration from the same set as `Operator.authorisation_level` (G1.9.1).
+    - G1.5.6. `curfew_start` and `curfew_end` (time) exist.
+    - G1.5.7. `active` (boolean) exists.
+  - G1.6. `FlightRequest`: a single requested flight, the centre of gravity of the system.
+    - G1.6.1. `id`: UUID, primary key. FKs: `operator_id` to `Operator`, `pilot_id` to `Pilot`, `aircraft_id` to `Aircraft`, `zone_code` to `Zone`.
+    - G1.6.2. `window_start` is timestamptz, UTC. `window_end` is timestamptz, UTC, and must be after `window_start`.
+    - G1.6.3. `requested_altitude_metres` exists.
+    - G1.6.4. `flight_purpose` is free text, capped at 2,000 characters. The cap is enforced in both the API layer and the DB (`char_length` check constraint).
+    - G1.6.5. `state` is an enumeration defined in `02-state-machine.md`.
+    - G1.6.6. `rejection_reason` is populated only on rejection.
+    - G1.6.7. `failing_gate` is populated only on gate-failure rejection; it is an enumeration (G1.9.7). [OPEN QUESTION: conflict between documents: `01-data-model.md` says `failing_gate` is populated only on gate-failure rejection, `02-state-machine.md` says `REJECTED` (including refusal by a reviewer) has `failing_gate` and `rejection_reason` populated, and `08-uml-diagrams.md` says `failing_gate` + `rejection_reason` (+ `rule_reference`) are populated on gate failure; what `failing_gate` holds after a reviewer rejection is not defined]
+    - G1.6.8. `rule_reference` is populated only on gate-failure rejection, alongside `failing_gate`. It was added in `0002_flight_request_rule_reference.sql` so that a rejected request's rule citation survives past the original `422` response, per the detail view in `docs/04-frontend-spec.md`.
+    - G1.6.9. `submitted_at`, `decided_at` and `decided_by` (reviewer identity string) exist.
+  - G1.7. `ReviewAction`: audit record of one reviewer decision.
+    - G1.7.1. `id`: UUID, primary key. `flight_request_id`: FK to `FlightRequest`. `created_at` exists.
+    - G1.7.2. `reviewer_id` comes from the `X-Reviewer-Id` header.
+    - G1.7.3. `action` is an enumeration (G1.9.8).
+    - G1.7.4. `note` is required when `action` is `REJECT`.
+  - G1.8. `AuditLog`: record of every state transition, on any entity. Fields: `id` (UUID, primary key), `entity_type` (for example `"FlightRequest"`), `entity_id`, `from_state` (nullable, for creation events), `to_state`, `actor`, `created_at`.
+  - G1.9. Enumerations hold exactly their documented values.
+    - G1.9.1. `Operator.authorisation_level` (and `Zone.required_authorisation_level`): `L1`, `L2`, `L3`, in ascending privilege.
+    - G1.9.2. `Operator.status`: `ACTIVE`, `SUSPENDED`.
+    - G1.9.3. `Pilot.rating`: `R_BASIC`, `R_ADVANCED`, `R_BVLOS`.
+    - G1.9.4. `Pilot.status`: `ACTIVE`, `INACTIVE`.
+    - G1.9.5. `Aircraft.status`: `ACTIVE`, `RETIRED`.
+    - G1.9.6. `Zone.zone_class`: `OPEN`, `CONTROLLED`, `RESTRICTED`.
+    - G1.9.7. `FlightRequest.failing_gate`: `PILOT`, `AIRCRAFT`, `ZONE`, `TIME_WINDOW`.
+    - G1.9.8. `ReviewAction.action`: `APPROVE`, `REJECT`.
+  - G1.10. Derived values are computed at read time and never stored. Persisting either one creates a staleness bug the moment its input field is corrected.
+    - G1.10.1. Pilot currency, derived from `certified_on`: computed at the moment it is checked, and exposed as a derived field on the pilot `GET` endpoint.
+    - G1.10.2. Aircraft weight band, derived from `mtom_grams`: computed at read time. Correcting a registered mass recalculates the band immediately; flight authorisations already issued are not revisited.
+    - G1.10.3. The actual thresholds for both are in `docs/06-business-rules.md` §2-§3 (pilot currency: 18 months, `OH-1` §2.3; weight bands: `OH-1` §3).
+  - G1.11. Time handling.
+    - G1.11.1. `window_start` and `window_end` are stored and compared in UTC.
+    - G1.11.2. Zone availability (curfew) is defined against local zone time. The conversion from UTC happens at evaluation time, inside the `TIME_WINDOW` gate, never at write time.
+- G2. State machine (`02-state-machine.md`).
+  - G2.1. A `FlightRequest` occupies exactly one of seven states at any time.
+  - G2.2. States.
+    - G2.2.1. `DRAFT`: created, never submitted; no gates have run. Not terminal.
+    - G2.2.2. `SUBMITTED`: transient. The submit call runs all four gates and leaves this state immediately; a request is never observed sitting in `SUBMITTED`. Not terminal.
+    - G2.2.3. `UNDER_REVIEW`: all gates passed; awaiting a reviewer decision. Not terminal.
+    - G2.2.4. `APPROVED`: authorised; still cancellable until the deadline (G2.5). Not terminal.
+    - G2.2.5. `REJECTED`: failed a gate, or refused by a reviewer; `failing_gate` and `rejection_reason` are populated. Terminal. [OPEN QUESTION: whether `failing_gate` is populated when a reviewer refuses the request is not stated]
+    - G2.2.6. `CANCELLED`: withdrawn by the operator. Terminal.
+    - G2.2.7. `COMPLETED`: flight concluded. Set only by the maintenance completion endpoint, never inferred from elapsed time. Terminal. [OPEN QUESTION: the path, the caller and the response of the maintenance completion endpoint are not stated] [OPEN QUESTION: gap between documents: the maintenance completion endpoint is not among the endpoints listed in `03-api-contract.md` (the 16 numbered ones and the authentication ones)]
+  - G2.3. Legal transitions (one row of the transition table each).
+    - G2.3.1. `DRAFT` --submit--> `SUBMITTED`, which resolves immediately into `UNDER_REVIEW` or `REJECTED`. Gates run synchronously; the caller never observes `SUBMITTED` at rest.
+    - G2.3.2. `SUBMITTED` --gates pass (automatic)--> `UNDER_REVIEW`. It is not a caller-invoked action; it is part of the submit call's own outcome.
+    - G2.3.3. `SUBMITTED` --gates fail (automatic)--> `REJECTED`, with `failing_gate` and `rejection_reason` populated. [OPEN QUESTION: the value of `rejection_reason` for a gate failure is not stated]
+    - G2.3.4. `UNDER_REVIEW` --approve--> `APPROVED`. Reviewer-only (`X-Reviewer-Id`); writes a `ReviewAction` row.
+    - G2.3.5. `UNDER_REVIEW` --reject--> `REJECTED`. Reviewer-only; `note` is required.
+    - G2.3.6. `APPROVED` --complete--> `COMPLETED`. Maintenance endpoint only; never inferred from elapsed time.
+    - G2.3.7. `DRAFT` --cancel--> `CANCELLED`. Operator-initiated.
+    - G2.3.8. `SUBMITTED` --cancel--> `CANCELLED`. Operator-initiated; only reachable in the narrow window before the gates resolve the request automatically. [OPEN QUESTION: the narrow window is not defined, and it is not stated how a caller can reach it when gates run synchronously] [OPEN QUESTION: `02-state-machine.md` and `08-uml-diagrams.md` both say `SUBMITTED` → cancel is possible in a narrow window and also that `SUBMITTED` is never observed at rest; how this transition can be exercised in a test]
+    - G2.3.9. `UNDER_REVIEW` --cancel--> `CANCELLED`. Operator-initiated.
+    - G2.3.10. `APPROVED` --cancel--> `CANCELLED`. Operator-initiated, only up to 2 hours before `window_start` (G2.5).
+  - G2.4. Illegal transitions. Any `(from, action)` pair not listed in G2.3 is illegal and must return `409`, including pairs whose `from` looks like a plausible source state for the action. [OPEN QUESTION: the structure of the `409` body for an illegal transition is not defined; `03-api-contract.md` gives only "conflict detail"]
+    - G2.4.1. From `REJECTED`, any action is illegal.
+    - G2.4.2. From `CANCELLED`, any action is illegal.
+    - G2.4.3. From `COMPLETED`, any action is illegal.
+    - G2.4.4. `submit` from `UNDER_REVIEW` (re-submitting something already under review) is illegal.
+  - G2.5. Cancellation deadline.
+    - G2.5.1. Cancelling an `APPROVED` request is allowed only up to 2 hours before `window_start`.
+    - G2.5.2. Closer than that, the cancel endpoint rejects it with `409`. This is a state-transition question, not a gate failure. [OPEN QUESTION: whether a cancellation exactly 2 hours before `window_start` is allowed is not stated]
+  - G2.6. Aircraft schedule overlap.
+    - G2.6.1. Only `APPROVED` and `UNDER_REVIEW` requests are counted by the overlap check inside the `AIRCRAFT` / `TIME_WINDOW` gates. [OPEN QUESTION: the document names two gates ("`AIRCRAFT` / `TIME_WINDOW`") and does not say which one holds the overlap check] [OPEN QUESTION: conflict between documents: `02-state-machine.md` places the overlap check inside the `AIRCRAFT` / `TIME_WINDOW` gates, while `06-business-rules.md` §1.4 places it only in `TIME_WINDOW` and §1.2 lists no overlap rule under `AIRCRAFT`; which `failing_gate` is returned for an overlap]
+    - G2.6.2. `DRAFT`, `REJECTED`, `CANCELLED` and `COMPLETED` requests are invisible to the overlap check.
+    - G2.6.3. A request that passed `validate` can still fail at `submit` if another request for the same aircraft was approved in the interim. This is expected behaviour, not a bug to work around.
+  - G2.7. Implementation note.
+    - G2.7.1. Every write to `FlightRequest.state` goes through one place in the code (not set ad hoc from multiple endpoint handlers), so the legal-transition check and the audit log write cannot be forgotten on any path.
+    - G2.7.2. The provided migration also logs every state change via a database trigger, as a second line of defense (`supabase/migrations/0001_init.sql`).
+- G3. API contract (`03-api-contract.md`).
+  - G3.1. General.
+    - G3.1.1. The base path is `/api/v1`.
+    - G3.1.2. Requests and responses are JSON.
+    - G3.1.3. The endpoints are implemented as Next.js route handlers under `app/api/v1/...`.
+  - G3.2. Identity model.
+    - G3.2.1. Operators log in (real login and registration through Supabase Auth, session cookie).
+    - G3.2.2. Reviewers do not log in: the reviewer identity is the `X-Reviewer-Id` header, a static identity label, not real authentication.
+  - G3.3. Authentication endpoints. They are listed with `—` instead of a number, deliberately, because they were added after the original set of 16 was closed (with explicit sign-off, not guessed).
+    - G3.3.1. `POST /operators`: register. It creates the Supabase Auth user and the Operator profile in one request, then signs the caller in (session cookie). It doubles as endpoint 1: "register" and "create an operator" are the same action.
+    - G3.3.2. `POST /auth/login`: log in with email and password; sets the session cookie.
+    - G3.3.3. `POST /auth/logout`: clear the session.
+    - G3.3.4. `GET /auth/me`: the logged-in operator's profile, or `401`.
+    - G3.3.5. The original endpoints keep their numbers 1-16 and the four authentication endpoints stay unnumbered; if the contract is regenerated, the numbers 1-16 are not renumbered to make room.
+  - G3.4. Enforcement is server-derived, not client-supplied.
+    - G3.4.1. Every operator-scoped endpoint (pilots, aircraft, flight-requests create / list / submit / cancel / validate) derives `operator_id` from the session. None of them accepts it as a request field or a query param, and none trusts a client claim about which operator is acting.
+    - G3.4.2. A caller with no session gets `401`.
+    - G3.4.3. An authenticated operator reaching for another operator's resource gets `403`.
+  - G3.5. Reviewer-or-owner reads.
+    - G3.5.1. `GET` on a single pilot, aircraft, operator or flight-request, and `POST .../validate`, accept either an owning operator's session or any `X-Reviewer-Id` header.
+    - G3.5.2. `GET /flight-requests` (list) is forced to the session's `operator_id` when there is no reviewer header.
+    - G3.5.3. `GET /flight-requests` (list) is unscoped (any operator, optional filters) when there is a reviewer header; this is how the reviewer queue works across every operator.
+  - G3.6. `authorisation_level` is no longer self-service.
+    - G3.6.1. Registration always creates an operator at `L1` (least privilege).
+    - G3.6.2. Raising the level is an out-of-band admin action, not a registration-form field (`app/api/v1/operators/route.ts`).
+  - G3.7. Registry endpoints.
+    - G3.7.1. 1 `POST /operators`: register an operator (see G3.3.1).
+    - G3.7.2. 2 `GET /operators/{id}`: retrieve an operator (self, or any reviewer).
+    - G3.7.3. 3 `POST /pilots`: register a pilot under the logged-in operator.
+    - G3.7.4. 4 `GET /pilots/{id}`: retrieve a pilot, including derived currency status (owning operator, or any reviewer).
+    - G3.7.5. 5 `POST /aircraft`: register an aircraft under the logged-in operator.
+    - G3.7.6. 6 `GET /aircraft/{id}`: retrieve an aircraft, including derived weight band (owning operator, or any reviewer).
+  - G3.8. Extension beyond the original 16: list endpoints, added with explicit sign-off.
+    - G3.8.1. `GET /pilots` and `GET /aircraft` list the logged-in operator's own pilots / aircraft.
+    - G3.8.2. Each row includes the same derived field as the single-entity `GET`.
+    - G3.8.3. There is no `operator_id` query param (it was a query param before operator auth existed; scoping now comes from the session).
+    - G3.8.4. If the contract is regenerated from a source document, these list endpoints are folded in rather than dropped.
+  - G3.9. Reference data.
+    - G3.9.1. 7 `GET /zones`: list the zone catalogue.
+    - G3.9.2. 8 `GET /zones/{code}`: retrieve one zone.
+    - G3.9.3. Zones have no create or update endpoints in this API; they are managed as reference data.
+  - G3.10. Flight request endpoints.
+    - G3.10.1. 9 `POST /flight-requests`: create a request in `DRAFT`, under the logged-in operator.
+    - G3.10.2. 10 `POST /flight-requests/{id}/submit`: run all four gates; move to `UNDER_REVIEW` or `REJECTED` (owning operator only).
+    - G3.10.3. 11 `GET /flight-requests/{id}`: retrieve a request (owning operator, or any reviewer).
+    - G3.10.4. 12 `GET /flight-requests`: list, filtered by `state`, `zone_code`, date range, scoped to the logged-in operator; a reviewer instead gets every operator and may also filter by `operator_id`.
+    - G3.10.5. 13 `POST /flight-requests/{id}/validate`: dry-run all gates without changing state (owning operator, or any reviewer).
+    - G3.10.6. 14 `POST /flight-requests/{id}/cancel`: cancel, subject to the deadline (owning operator only).
+  - G3.11. `validate` (endpoint 13).
+    - G3.11.1. It runs every gate exactly as `submit` would, in the same order.
+    - G3.11.2. It never changes state.
+    - G3.11.3. The gate pipeline is a single shared function that both `submit` and `validate` call; the gate logic is not duplicated between them.
+    - G3.11.4. It exists so that the frontend's "check before submitting" button is cheap and safe to call repeatedly, and so that the reviewer detail view can show all four gate results without side effects. [OPEN QUESTION: conflict between documents: gates stop at the first failure and `validate` runs the pipeline exactly as `submit` would (`03-api-contract.md`, `06-business-rules.md`), but `03-api-contract.md` and `04-frontend-spec.md` say the reviewer detail view shows "all four gate results" and the operator sees "per-gate pass/fail", and `08-uml-diagrams.md` says `validate` returns per-gate results; whether gates after the first failure are reported]
+  - G3.12. Reviewer endpoints (require `X-Reviewer-Id`).
+    - G3.12.1. 15 `POST /flight-requests/{id}/approve`: approve a request under review.
+    - G3.12.2. 16 `POST /flight-requests/{id}/reject`: reject a request under review, with a required note.
+    - G3.12.3. Both write a `ReviewAction` row and move the request's state (see `02-state-machine.md`).
+    - G3.12.4. Both return `400` if `X-Reviewer-Id` is missing.
+  - G3.13. Error semantics: six statuses carry meaning (four originally, plus `401` and `403` added alongside operator auth). [OPEN QUESTION: the document defines `401` as "no operator session and no `X-Reviewer-Id`" and also says reviewer endpoints return `400` when `X-Reviewer-Id` is missing; which status applies to a reviewer endpoint called with no session and no header]
+    - G3.13.1. `409` means the request cannot be attempted at all (wrong state, scheduling conflict); `422` means it was attempted and a business rule refused it.
+    - G3.13.2. `401` is "who are you" (no session, no reviewer header); `403` is "I know who you are and it is not allowed" (wrong operator's resource, or the `SUSPENDED`-operator precondition, see G3.15.5). [OPEN QUESTION: conflict between documents: `03-api-contract.md` lists the `SUSPENDED`-operator precondition under `403`, while `05-open-questions.md` §1 and `07-clarifications.md` item 3 say its status code and body are undefined (`403` only a proposed placeholder); also `03-api-contract.md` says "write endpoints" while `05-open-questions.md` and `07-clarifications.md` name create / submit / approve, and `approve` is a reviewer action]
+    - G3.13.3. `400`: malformed request body; the body carries validation detail.
+    - G3.13.4. `401`: not authenticated (no operator session and no `X-Reviewer-Id`); the body carries error detail.
+    - G3.13.5. `403`: authenticated, but not permitted for this resource; the body carries error detail.
+    - G3.13.6. `404`: entity not found; no body is specified.
+    - G3.13.7. `409`: invalid state transition, or a scheduling conflict between requests; the body carries conflict detail.
+    - G3.13.8. `422`: business rule violation, with the failing gate identified; the body is structured (G3.14).
+  - G3.14. The `422` body names the gate that failed and cites the rule that governed the decision, so a rejection can be traced back to its source.
+    - G3.14.1. `failing_gate` is one of `PILOT`, `AIRCRAFT`, `ZONE`, `TIME_WINDOW`; gates evaluate in that order and the response names the first gate that failed.
+    - G3.14.2. `rule_reference` is the document and section responsible for the rule. The real values are in `docs/06-business-rules.md` §6 (as corrected by `docs/07-clarifications.md`) and are used verbatim, not invented.
+    - G3.14.3. `message` is human-readable, specific to the failure, written for an operator, not for a developer.
+    - G3.14.4. The example `TSD-4 §3.2` in the contract is illustrative only and is not one of the real citations. Real values are, for example, `OH-1 §2.1` for a pilot rating that does not cover the zone class and `ZC-2026.1 §2` for an altitude that exceeds the zone ceiling.
+  - G3.15. Gate pipeline (shared by `submit` and `validate`).
+    - G3.15.1. The gates are evaluated in a fixed order: 1. `PILOT`, 2. `AIRCRAFT`, 3. `ZONE`, 4. `TIME_WINDOW`.
+    - G3.15.2. Evaluation stops at the first failure.
+    - G3.15.3. All four gates are fully specified in `docs/06-business-rules.md` as corrected by `docs/07-clarifications.md`.
+    - G3.15.4. The weight-band check belongs to `AIRCRAFT`, not `ZONE`, despite the literal wording of the source document.
+    - G3.15.5. `Operator.status = SUSPENDED` is a separate precondition on the write endpoints themselves, not part of this pipeline. [OPEN QUESTION: the status code and response body for a blocked suspended operator are not defined in the documentation]
+  - G3.16. [OPEN QUESTION: the request body fields, required and optional, of the `POST` endpoints are not stated; success status codes are not defined in `03-api-contract.md` (`08-uml-diagrams.md` shows only `200/201` for `submit` and `200` for `validate`); the pagination, sort order and date-range parameter names of `GET /flight-requests`, the `404` body and the login failure response are not defined]
+  - G3.17. [OPEN QUESTION: whether `GET /zones` and `GET /zones/{code}` require a session or an `X-Reviewer-Id` header is not stated; the contract states `401` for operator-scoped endpoints only]
+- G4. Frontend (`04-frontend-spec.md`). Styling is intentionally minimal: the interface exists to be automated (hence the `data-testid` contract), not to be a polished consumer product.
+  - G4.1. There are two roles, Operator and Reviewer. The active role is chosen from a switcher in the header. [OPEN QUESTION: the `data-testid` of the role switcher and the names of its options are not stated]
+  - G4.2. Operators register and log in for real (Supabase Auth, session cookie). Where the document says "the current operator", that identity comes from the session, not from anything the operator types in each visit.
+  - G4.3. The reviewer role is not a login: it is an `X-Reviewer-Id` header typed into the header UI. [OPEN QUESTION: the input element for the reviewer id, its `data-testid`, and the behaviour when it is empty or invalid are not stated]
+  - G4.4. The Operator portal requires login. It manages the operator's own pilots, aircraft and requests, and "its own" is enforced server-side via the session, not merely as a UI convention. [OPEN QUESTION: what a logged-out user sees or is redirected to when opening an Operator portal page is not stated]
+  - G4.5. Login and registration pages exist. [OPEN QUESTION: error handling for wrong credentials, duplicate registration and invalid input is not stated]
+    - G4.5.1. A login page at `/login`.
+    - G4.5.2. A register page at `/register`.
+  - G4.6. Registration is a single combined form. [OPEN QUESTION: the full list of Operator profile fields on the form behind "etc." is not stated (`01-data-model.md` lists the Operator fields but does not say which of them are on the form)]
+    - G4.6.1. The form holds the auth credentials (email, password) plus the Operator profile fields (`legal_name`, `national_id`, etc.) in one submit.
+    - G4.6.2. A single submit creates both the auth user and the Operator profile together.
+    - G4.6.3. The operator is logged in immediately after registration.
+  - G4.7. `authorisation_level` and registration.
+    - G4.7.1. `authorisation_level` is not a field on the registration form.
+    - G4.7.2. Registration always starts an operator at `L1`.
+    - G4.7.3. Raising the level is an out-of-band admin action.
+  - G4.8. Registry pages for pilots and aircraft exist, each with a create form. [OPEN QUESTION: the fields of the pilot and aircraft create forms are not stated (`01-data-model.md` lists the entity fields but does not say which are on the forms)]
+  - G4.9. The request creation form contains:
+    - G4.9.1. a zone picker fed from `GET /zones`;
+    - G4.9.2. a pilot picker, scoped to the current operator;
+    - G4.9.3. an aircraft picker, scoped to the current operator;
+    - G4.9.4. window start and end inputs;
+    - G4.9.5. an altitude input;
+    - G4.9.6. a free-text purpose field.
+  - G4.10. A "Check before submitting" button calls `POST /flight-requests/{id}/validate` and shows a per-gate pass/fail result without changing state. [OPEN QUESTION: how the button works for a request that has not been created yet (the endpoint needs an `{id}`) is not stated]
+  - G4.11. A "My requests" list exists and is filterable by state. [OPEN QUESTION: the list of filter values and the `data-testid` of the filter are not stated]
+  - G4.12. The request detail view shows the rejection reason and rule reference when applicable. [OPEN QUESTION: the conditions under which they are "applicable" are not stated in `04-frontend-spec.md` (`01-data-model.md` says `rejection_reason` is populated only on rejection and `failing_gate` / `rule_reference` only on gate-failure rejection)]
+  - G4.13. The Reviewer queue is the shared queue of requests awaiting decision.
+    - G4.13.1. A pending requests table (state = `UNDER_REVIEW`).
+    - G4.13.2. The table is sortable by submission time. [OPEN QUESTION: default sort order and sort direction are not stated]
+  - G4.14. The Reviewer request detail shows all four gate results (the gates are `PILOT`, `AIRCRAFT`, `ZONE`, `TIME_WINDOW`, in this order, per `03-api-contract.md`).
+  - G4.15. The Reviewer has approve and reject actions (endpoints 15 and 16 in `03-api-contract.md`).
+    - G4.15.1. An approve action.
+    - G4.15.2. A reject action; reject requires a note, mapped to the required `note` field on `POST /flight-requests/{id}/reject`. [OPEN QUESTION: the UI behaviour when reject is attempted without a note is not stated]
+  - G4.16. Selector stability: every interactive element carries a `data-testid`. These values are part of the interface contract, not incidental markup, because automated suites bind to them. A sensible stable value is set the first time (for example `data-testid="flight-request-submit-button"`) and is not renamed later unless the underlying element genuinely changes into something else. [OPEN QUESTION: the complete list of expected `data-testid` values is not stated]
+  - G4.17. Operator auth exception to selector stability.
+    - G4.17.1. `operator-id-input` (a free-text box for pasting an operator UUID) was removed, not renamed, because the element it named no longer exists.
+    - G4.17.2. `operator-login-link` and `operator-register-link` are shown when logged out.
+    - G4.17.3. `operator-session-info` and `operator-logout-button` are shown when logged in.
+  - G4.18. The form does not pre-filter. Pilot, aircraft and zone pickers in the request creation form are not filtered against the business rules, so an operator can select a combination that cannot possibly pass. Rules are enforced only at `validate` and `submit`, never while the form is being filled in. Client-side eligibility filtering must not be added, because it is not part of the spec and would hide gate failures the operator needs to see.
+- G5. Canonical status of open questions (`05-open-questions.md`).
+  - G5.1. The document is the single source of truth for status.
+    - G5.1.1. It is the single source of truth for "is this resolved yet".
+    - G5.1.2. The table is not duplicated elsewhere: `docs/06-business-rules.md` §7 and `docs/07-clarifications.md` point here instead of restating it.
+    - G5.1.3. `docs/07-clarifications.md` remains the place to read why each resolved item was resolved the way it was; `05-open-questions.md` only tracks current status.
+  - G5.2. Question 1, "What fails the `AIRCRAFT` gate?": Resolved. The weight-band check (see `docs/06-business-rules.md` §1.2 and `docs/07-clarifications.md` item 1). Does not block gate implementation.
+  - G5.3. Question 2, `Aircraft.status = RETIRED` / `Pilot.status = INACTIVE` tied to a gate?: Resolved, no. Neither is tied to any gate by any source document; both are left unwired (see `docs/07-clarifications.md` item 2). Does not block gate implementation.
+  - G5.4. Question 3, operator authorisation level → which gate, which citation?: Resolved. `ZONE`, citing `OH-1 §4` (see `docs/07-clarifications.md` item 4). Does not block gate implementation.
+  - G5.5. Question 4, `Operator.status = SUSPENDED` status code and response shape: Open (see G5.8). It does not block gate implementation, because it is a precondition on writes, not a gate.
+  - G5.6. Question 5, zone `active` flag citation: Open (rule settled, citation not fully confirmed; see G5.10). It does not block gate implementation; the rule is to be implemented now.
+  - G5.7. Only rows 4 and 5 (G5.5, G5.6) are still unresolved. Neither blocks implementing the four gates.
+  - G5.8. `Operator.status = SUSPENDED`: status code and response shape are undefined.
+    - G5.8.1. It is a precondition on write operations (create, submit, approve), not a gate outcome.
+    - G5.8.2. It must not be represented as a `422` with a `failing_gate`, because none of the four gate values fits and doing so would misrepresent it.
+    - G5.8.3. The status code and response body to return when a suspended operator's request is blocked are still missing. [OPEN QUESTION: the status code and response body for a blocked suspended operator are not defined in the documentation]
+  - G5.9. No invented response may be forced into the existing `422` contract.
+    - G5.9.1. If the behaviour must ship before an answer arrives, it is flagged back rather than guessed.
+    - G5.9.2. A `403` with an ad hoc body is a reasonable placeholder to propose.
+    - G5.9.3. Such a placeholder is called out as a placeholder in code and in conversation with whoever owns the API contract, and is not treated as settled.
+  - G5.10. Zone `active`.
+    - G5.10.1. The rule is settled: an inactive zone fails any flight request against it, under the `ZONE` gate. It is about as certain as the operator-authorisation-level rule was before that was confirmed.
+    - G5.10.2. `ZC-2026.1 §4` as its specific citation is not confirmed with the same certainty. [OPEN QUESTION: confirmation of the `ZC-2026.1 §4` citation]
+    - G5.10.3. The check is safe to implement now.
+    - G5.10.4. A one-line confirmation of the citation is wanted before treating `rule_reference: "ZC-2026.1 §4"` as fully authoritative in a `422` body.
+  - G5.11. All four gates, `PILOT`, `AIRCRAFT`, `ZONE` and `TIME_WINDOW`, have defined logic in `docs/06-business-rules.md` and can be fully implemented. Nothing in `05-open-questions.md` blocks that work.
+- G6. Business rules (`06-business-rules.md`).
+  - G6.1. Authority of the compilation.
+    - G6.1.1. Where this compilation and a source document disagree, the source document governs. [OPEN QUESTION: the source documents (`OH-1`, `ZC-2026.1`, `TSD-4`, `A-7`, `API-REF`) are not provided, so the rules can only be verified against the compilation]
+    - G6.1.2. One exception: the `AIRCRAFT`/`ZONE` gate assignment for the weight-band check was corrected per `docs/07-clarifications.md`, because the rules owner confirmed that the literal "fails the zone gate" wording of `ZC-2026.1` §2 is a corpus error.
+  - G6.2. Sources in force.
+    - G6.2.1. `OH-1` v2.0 (pilot ratings/currency, aircraft weight bands, operator authorisation levels).
+    - G6.2.2. `ZC-2026.1` as amended by `A-7`.
+    - G6.2.3. `TSD-4`.
+    - G6.2.4. `API-REF` (§4.1, the `422` `rule_reference` contract; §5, gate evaluation order).
+  - G6.3. Sources not in force.
+    - G6.3.1. `CR-1` (Airspace Policy Group, 2026-03-02) is explicitly not a source. It is a proposal that would replace the pilot qualification model, extend the weight scale and revise the zone catalogue; nothing in it is in force.
+    - G6.3.2. `OH-1` v1.4 is superseded, retained for audit only, and is not a source; its superseded values are noted where they matter for old records.
+  - G6.4. Gate evaluation order. [OPEN QUESTION: the order in which multiple failing conditions inside one gate (two in `PILOT`, three in `ZONE`, five in `TIME_WINDOW`) are reported is not stated]
+    - G6.4.1. Gates run in the fixed order `PILOT` → `AIRCRAFT` → `ZONE` → `TIME_WINDOW`.
+    - G6.4.2. Evaluation stops at the first failure.
+    - G6.4.3. `failing_gate` in a `422` response always names the first gate to fail, never every gate that would fail (`API-REF` §5).
+  - G6.5. Two independent conditions; both must hold.
+  - G6.6. Rating covers the zone's class (`OH-1` §2.1).
+    - G6.6.1. `R_BASIC` → `OPEN` only.
+    - G6.6.2. `R_ADVANCED` → `OPEN`, `CONTROLLED`.
+    - G6.6.3. `R_BVLOS` → `OPEN`, `CONTROLLED`, `RESTRICTED`.
+    - G6.6.4. It is evaluated independently of the zone gate, so a request can fail one without the other.
+  - G6.7. Certification current (`OH-1` §2.3). [OPEN QUESTION: how "18 months" is calculated (calendar months) and whether the exact 18-month date is still current are not stated]
+    - G6.7.1. Current for 18 months from `certified_on`, with no grace period.
+    - G6.7.2. Checked against the flight's `window_start`, not submission time, so a rating current at submission but lapsed by the flight window fails this gate.
+    - G6.7.3. Currency is never stored; it is computed at the moment it is checked.
+  - G6.8. Weight band permitted (`ZC-2026.1` §2).
+    - G6.8.1. The aircraft's derived weight band must be one of the zone's `permitted_bands`.
+    - G6.8.2. The gate assignment was corrected from `ZONE` to `AIRCRAFT`; the rule and citation are unchanged. It is implemented in `lib/gates/aircraft-gate.ts`.
+  - G6.9. Shared citation.
+    - G6.9.1. `ZC-2026.1` §2 covers both the weight-band rule and the altitude-vs-ceiling rule, and both cite `"ZC-2026.1 §2"` verbatim with no `.a`/`.b` suffix. This is not a copy-paste error.
+    - G6.9.2. In a `422` response `failing_gate` (`AIRCRAFT` vs. `ZONE`) disambiguates them; `failing_gate` is read first and `rule_reference` is a citation, not a unique identifier.
+  - G6.10. Registration-time precondition, not a gate (`OH-1` §3; `API-REF` §4).
+    - G6.10.1. An aircraft with `mtom_grams` > 30,000 g is refused registration outright with a `422` at the `/aircraft` write. [OPEN QUESTION: conflict between documents: `03-api-contract.md` says every `422` names the failing gate, while `06-business-rules.md` §1.2 and §3 say an aircraft above 30,000 g is refused with `422` as a non-gate precondition (`rule_reference` `OH-1 §3`); what body that `422` carries]
+    - G6.10.2. This happens before any gate runs and before the aircraft record exists.
+    - G6.10.3. Such an aircraft never reaches a `FlightRequest`.
+  - G6.11. `Aircraft.status` (`ACTIVE`/`RETIRED`) is not tied to this or any gate by any source document (`docs/07-clarifications.md` item 2). It is left unwired.
+  - G6.12. Altitude within ceiling: `requested_altitude_metres` must be ≤ the zone's `ceiling_metres` (`ZC-2026.1` §2, explicit: the text says "fails the zone gate").
+  - G6.13. Operator authorisation level: the operator's `authorisation_level` must be ≥ the zone's `required_authorisation_level` (`L1` < `L2` < `L3`), independent of pilot rating and aircraft band (`OH-1` §4). Confirmed by the rules owner (`docs/07-clarifications.md` item 4).
+  - G6.14. Zone active: an inactive zone fails any flight request against it (`ZC-2026.1` §4). Inferred: the source says "fails validation" and does not name a specific gate. The citation is not yet confirmed. [OPEN QUESTION: confirmation of the `ZC-2026.1 §4` citation]
+  - G6.15. The weight-band-vs-zone rule that appeared in earlier drafts has moved to `AIRCRAFT` (see G6.8).
+  - G6.16. Minimum lead time: ≥ 6 hours between submission and `window_start` (`TSD-4` §2.1).
+  - G6.17. Maximum advance booking: ≤ 60 days before `window_start` (`TSD-4` §2.2, restated in `OH-1` §5). [OPEN QUESTION: from which moment the 60-day limit is measured is not stated (`06-business-rules.md` §1.4 says only "≤ 60 days before `window_start`", while the 6-hour lead time is measured from submission)]
+  - G6.18. Duration (`TSD-4` §3).
+    - G6.18.1. 15-240 minutes, inclusive at both ends.
+    - G6.18.2. `window_end` strictly after `window_start`.
+  - G6.19. Curfew (`TSD-4` §4). [OPEN QUESTION: whether the curfew start and end instants themselves are inside the curfew is not stated]
+    - G6.19.1. No part of the window may fall inside the zone's curfew, if it has one.
+    - G6.19.2. It is evaluated minute-by-minute across the whole window, not just the endpoints.
+    - G6.19.3. Curfews crossing midnight are one continuous period.
+  - G6.20. No overlap (`TSD-4` §5).
+    - G6.20.1. No other `APPROVED` or `UNDER_REVIEW` request for the same aircraft may share an instant with this window.
+    - G6.20.2. Windows that only touch at a boundary (one ends 14:00, next starts 14:00) do not overlap.
+    - G6.20.3. `DRAFT`, `REJECTED`, `CANCELLED` and `COMPLETED` requests are not considered.
+  - G6.21. UTC vs. zone-local time. [OPEN QUESTION: daylight-saving or offset handling for the zone-local conversion is not stated] [OPEN QUESTION: which timezone each zone uses for its curfew is not stated in any of the documents]
+    - G6.21.1. `window_start`/`window_end` are stored and compared in UTC.
+    - G6.21.2. Curfews are defined in zone-local time.
+    - G6.21.3. The conversion happens at evaluation time, not at write time, and there is no stored "curfew in UTC" value.
+  - G6.22. Curfew values per zone in force today (`ZC-2026.1` general value, overridden where `A-7` applies):
+    - G6.22.1. `KBP-CTR-3`: 23:00-05:00. `A-7` §1 narrows the `ZC-2026.1` general value of 22:00-06:00; `A-7` §4 says the amendment governs where the two disagree.
+    - G6.22.2. `ODS-CTR-5`: 23:00-05:00 (`A-7` §1, same override).
+    - G6.22.3. `LVV-RST-2`: 22:00-06:00 (`ZC-2026.1` §3, unamended).
+    - G6.22.4. `ZTM-RST-7`: 22:00-06:00 (`ZC-2026.1` §3, unamended).
+    - G6.22.5. `DNI-OPN-1`: none (`ZC-2026.1` §3).
+    - G6.22.6. `KHR-OPN-4`: none (`ZC-2026.1` §3).
+  - G6.23. The amendment register must be checked before trusting the base catalogue's curfew column for `KBP-CTR-3` or `ODS-CTR-5`; this is the one place the two documents disagree and the amendment wins.
+  - G6.24. A pilot's certification is current for 18 months from `certified_on`, with no grace period: one day past the 18-month mark is not current. It is evaluated against the flight's `window_start`, not the submission time. Currency is derived, never stored. Source: `OH-1` v2.0 §2.3, the currently governing value.
+  - G6.25. `OH-1` v1.4 (superseded, audit-only) used 24 months. A historical record or old ticket citing 24 months must not be carried into the current implementation.
+  - G6.26. Four bands, upper bound inclusive, the complete taxonomy in force:
+    - G6.26.1. `C0`: 0 g to 900 g (inclusive).
+    - G6.26.2. `C1`: above 900 g to 3,500 g (inclusive).
+    - G6.26.3. `C2`: above 3,500 g to 12,000 g (inclusive).
+    - G6.26.4. `C3`: above 12,000 g to 30,000 g (inclusive).
+  - G6.27. Band boundaries and taxonomy.
+    - G6.27.1. Exactly 900 g is `C0`; exactly 3,500 g is `C1`; exactly 12,000 g is `C2`.
+    - G6.27.2. There is no `C4` or `C5` in any governing document (they appear only in the unadopted `CR-1`).
+    - G6.27.3. `Zone.permitted_bands` references the same `C0`-`C3` taxonomy; nothing outside it is valid.
+  - G6.28. Above 30,000 g: not accepted for registration under any circumstance. It is enforced at the `/aircraft` write with a `422`, before the aircraft record and before any gate exists; there is currently no path for such an aircraft to reach a flight request. Source: `OH-1` v2.0 §3, the currently governing table.
+  - G6.29. `OH-1` v1.4 (superseded) set the `C1`/`C2` boundary at 4,000 g rather than 3,500 g. When reconciling old data or old test fixtures, that boundary shift is checked first.
+  - G6.30. Six zones, all currently active. Base values from `ZC-2026.1` §3, with `A-7`'s curfew narrowing applied to the two zones it covers. The columns are: name, class, ceiling, permitted bands, curfew, required authorisation level, active.
+    - G6.30.1. `KBP-CTR-3`: Kyiv Boryspil Corridor 3, `CONTROLLED`, 120 m, C0-C2, 23:00-05:00 (per `A-7`), `L2`, active.
+    - G6.30.2. `ODS-CTR-5`: Odesa Corridor 5, `CONTROLLED`, 90 m, C0-C2, 23:00-05:00 (per `A-7`), `L2`, active.
+    - G6.30.3. `LVV-RST-2`: Lviv Restricted 2, `RESTRICTED`, 60 m, C0-C1, 22:00-06:00, `L3`, active.
+    - G6.30.4. `ZTM-RST-7`: Zhytomyr Restricted 7, `RESTRICTED`, 45 m, C0, 22:00-06:00, `L3`, active.
+    - G6.30.5. `DNI-OPN-1`: Dnipro Open 1, `OPEN`, 120 m, C0-C3, no curfew, `L1`, active.
+    - G6.30.6. `KHR-OPN-4`: Kharkiv Open 4, `OPEN`, 120 m, C0-C3, no curfew, `L1`, active.
+    - G6.30.7. The source of the catalogue is `ZC-2026.1` §3-§4 and `A-7` §1, §4.
+  - G6.31. `zone_class` also gates pilot rating independently of the table (`ZC-2026.1` §2, `OH-1` §2.1), restated so a seed file does not need to derive it from `zone_class` alone. [OPEN QUESTION: `06-business-rules.md` §1.1 cites only `OH-1 §2.1` for the rating-to-zone-class mapping, while §4 cites `ZC-2026.1 §2` and `OH-1 §2.1` for the same mapping; which citation applies]
+    - G6.31.1. `OPEN` accepts any rating.
+    - G6.31.2. `CONTROLLED` requires `R_ADVANCED` or `R_BVLOS`.
+    - G6.31.3. `RESTRICTED` requires `R_BVLOS`.
+  - G6.32. An `APPROVED` request may be cancelled up to 2 hours before `window_start` (`TSD-4` §6). [OPEN QUESTION: whether a cancellation exactly 2 hours before `window_start` is allowed is not stated]
+    - G6.32.1. A cancellation attempted closer than 2 hours before `window_start` is rejected.
+    - G6.32.2. In that case the request must proceed or be handled by reviewer action instead. [OPEN QUESTION: conflict between documents: `06-business-rules.md` §5 says a refused cancellation means "the request must proceed or be handled by reviewer action instead", but `02-state-machine.md` has no reviewer action on an `APPROVED` request (approve and reject exist only from `UNDER_REVIEW`); what reviewer action is meant]
+  - G6.33. The `rule_reference` returned for each condition:
+    - G6.33.1. `PILOT`, rating doesn't cover zone class: `OH-1 §2.1`.
+    - G6.33.2. `PILOT`, certification not current: `OH-1 §2.3`.
+    - G6.33.3. `AIRCRAFT`, weight band not permitted: `ZC-2026.1 §2` (shared citation).
+    - G6.33.4. `ZONE`, altitude exceeds ceiling: `ZC-2026.1 §2` (shared citation).
+    - G6.33.5. `ZONE`, operator authorisation level too low: `OH-1 §4`.
+    - G6.33.6. `ZONE`, zone inactive: `ZC-2026.1 §4` (citation not yet fully confirmed).
+    - G6.33.7. `TIME_WINDOW`, lead time too short: `TSD-4 §2.1`.
+    - G6.33.8. `TIME_WINDOW`, booked too far in advance: `TSD-4 §2.2`.
+    - G6.33.9. `TIME_WINDOW`, duration out of range: `TSD-4 §3`.
+    - G6.33.10. `TIME_WINDOW`, falls within curfew, `KBP-CTR-3`/`ODS-CTR-5`: `A-7 §1`. [OPEN QUESTION: `06-business-rules.md` §1.4 cites `TSD-4 §4` as the source of the curfew rule, while §6 gives `A-7 §1` and `ZC-2026.1 §3` as the `rule_reference` values for a curfew failure and does not list `TSD-4 §4`; §6 is the only place that states which value goes into the `422` body]
+    - G6.33.11. `TIME_WINDOW`, falls within curfew, other zones: `ZC-2026.1 §3`.
+    - G6.33.12. `TIME_WINDOW`, overlaps another request: `TSD-4 §5`.
+    - G6.33.13. Not a gate (registration), aircraft `mtom_grams` > 30,000 g: `OH-1 §3`.
+  - G6.34. The format matches the `API-REF` §4.1 example (`"TSD-4 §3.2"`), which is illustrative, not a real citation.
+  - G6.35. Canonical status of open questions lives in `docs/05-open-questions.md`. [OPEN QUESTION: the status code and response body for a suspended operator are undefined]
+    - G6.35.1. Only the `Operator.status = SUSPENDED` response shape and the zone-`active` citation remain open.
+    - G6.35.2. Neither blocks gate implementation.
+    - G6.35.3. `docs/07-clarifications.md` has the reasoning behind each resolution.
+  - G6.36. The document reflects the corpus as of the dates on its sources: `TSD-4` and `ZC-2026.1` effective 2026-01-01, `A-7` effective 2026-02-10, `OH-1` v2.0 effective 2026-01-15. It does not reflect `CR-1`.
+- G7. Clarifications from the rules owner (`07-clarifications.md`). The addendum records answers received from the owner of the Business Rules source material, resolving most of the open questions raised in the earlier version of `docs/05-open-questions.md`.
+  - G7.1. Authority: where a clarification here conflicts with the literal wording of `docs/06-business-rules.md`, this addendum governs; it is a correction, not a competing interpretation. `docs/06-business-rules.md` has been updated to match.
+  - G7.2. Status: current status (resolved vs. open) is in `docs/05-open-questions.md`, the canonical table. `07-clarifications.md` only explains why each item was decided; it is not updated again if a status changes, so its wording is not the live answer.
+  - G7.3. Item 1, the `AIRCRAFT` gate.
+    - G7.3.1. Failing the `AIRCRAFT` gate means the weight-band check: the aircraft's derived weight band against the zone's `permitted_bands`.
+    - G7.3.2. It is a real gate check, not a stub.
+  - G7.4. Item 1, reassignment: this rule had been placed under `ZONE` in `docs/06-business-rules.md` §1.3 (sourced from `ZC-2026.1` §2, whose text literally says "fails the zone gate").
+    - G7.4.1. That placement was a corpus error in `ZC-2026.1` §2, not a trap or a second valid reading.
+    - G7.4.2. The rule is unchanged and still cites `ZC-2026.1 §2`; only the gate changed.
+    - G7.4.3. It is implemented in `lib/gates/aircraft-gate.ts`, not `lib/gates/zone-gate.ts`.
+  - G7.5. Item 2: `Aircraft.status = RETIRED` / `Pilot.status = INACTIVE`. Resolved as "no": nothing ties either field to a gate outcome. Both are left unwired, and no check is inferred from the pattern of the gates that are defined.
+  - G7.6. Item 3, `Operator.status = SUSPENDED`: it is a precondition on the write operations themselves (create / submit / approve), not a gate outcome.
+  - G7.7. Item 3, response.
+    - G7.7.1. It must not be represented as a `422` with a `failing_gate`, because none of `PILOT`, `AIRCRAFT`, `ZONE`, `TIME_WINDOW` fits.
+    - G7.7.2. The status code and response body for a suspended operator's blocked request are undefined, and an answer is needed before `POST /flight-requests`, `.../submit` or `.../approve` can handle a suspended operator correctly. [OPEN QUESTION: the status code and response body for a suspended operator's blocked request]
+    - G7.7.3. `422` is not used as a default to make it fit the existing shape; the question is raised rather than guessed.
+  - G7.8. Item 4, altitude vs. ceiling → `ZONE`: confirmed as originally documented.
+  - G7.9. Item 4, operator authorisation level → `ZONE`: confirmed, citing `OH-1 §4`. No longer "inferred"; it has the same confidence as the explicit rows.
+  - G7.10. Item 4, weight band → `AIRCRAFT`, not `ZONE`: moved per item 1. It was misplaced rather than merely under-cited.
+  - G7.11. Item 4, zone `active` flag: still unattributed and unresolved. The rule (an inactive zone fails any flight request against it) is presumably under `ZONE` by elimination. The citation (`ZC-2026.1 §4` in the earlier draft) is not confirmed. The check is implemented, but the citation is not treated as fully confirmed. [OPEN QUESTION: confirmation of the `ZC-2026.1 §4` citation]
+  - G7.12. Net effect: all four gates have a defined check to implement; `AIRCRAFT` is no longer a stub. Only the zone `active` citation and the `SUSPENDED` operator handling remain open, and neither blocks writing the gate logic.
+  - G7.13. [OPEN QUESTION: the document says it resolves "most" of the open questions and titles item 4 "Resolved, with one reassignment", yet item 4 also contains the unresolved zone `active` flag, and item 3 is titled as staying open; which items count as resolved is determined by `docs/05-open-questions.md`]
+- G8. UML diagrams (`08-uml-diagrams.md`).
+  - G8.1. The three Mermaid diagrams (ER, state, sequence) render in GitHub, GitLab and other markdown viewers.
+  - G8.2. The file is derived from `01-data-model.md` and `02-state-machine.md` and matches them; on drift, those documents are the source of truth.
+  - G8.3. Relationships.
+    - G8.3.1. `OPERATOR` registers many `PILOT`.
+    - G8.3.2. `OPERATOR` registers many `AIRCRAFT`.
+    - G8.3.3. `OPERATOR` owns many `FLIGHT_REQUEST`.
+    - G8.3.4. `PILOT` flies many `FLIGHT_REQUEST`; each `FLIGHT_REQUEST` has exactly one `PILOT`.
+    - G8.3.5. `AIRCRAFT` is used by many `FLIGHT_REQUEST`; each `FLIGHT_REQUEST` has exactly one `AIRCRAFT`.
+    - G8.3.6. `ZONE` is "requested in" many `FLIGHT_REQUEST`; each `FLIGHT_REQUEST` has exactly one `ZONE`.
+    - G8.3.7. `FLIGHT_REQUEST` is "decided by" many `REVIEW_ACTION`.
+  - G8.4. `OPERATOR`.
+    - G8.4.1. `id` is the primary key, with an FK to `auth.users(id)`.
+    - G8.4.2. `national_id` is unique.
+    - G8.4.3. `email` is unique.
+    - G8.4.4. `authorisation_level` holds `L1`, `L2`, `L3`.
+    - G8.4.5. `status` holds `ACTIVE`, `SUSPENDED`.
+    - G8.4.6. `legal_name`, `phone`, `address_line`, `city`, `postal_code` and `registered_on` exist.
+  - G8.5. `PILOT`.
+    - G8.5.1. `id` is the primary key; `operator_id` is an FK.
+    - G8.5.2. `national_id` is unique.
+    - G8.5.3. `rating` holds `R_BASIC`, `R_ADVANCED`, `R_BVLOS`.
+    - G8.5.4. `status` holds `ACTIVE`, `INACTIVE`.
+    - G8.5.5. `full_name` and `certified_on` exist; `certified_on` is the source of the derived currency.
+  - G8.6. `AIRCRAFT`.
+    - G8.6.1. `id` is the primary key; `operator_id` is an FK.
+    - G8.6.2. `serial_number` is unique.
+    - G8.6.3. `status` holds `ACTIVE`, `RETIRED`.
+    - G8.6.4. `manufacturer`, `model`, `mtom_grams` (int, the source of the derived weight band) and `registered_on` exist.
+  - G8.7. `ZONE`.
+    - G8.7.1. `code` is the primary key.
+    - G8.7.2. `zone_class` holds `OPEN`, `CONTROLLED`, `RESTRICTED`.
+    - G8.7.3. `permitted_bands` follows the `C0`-`C3` taxonomy.
+    - G8.7.4. `required_authorisation_level` holds `L1`, `L2`, `L3`.
+    - G8.7.5. `name`, `ceiling_metres`, `curfew_start`, `curfew_end` and `active` exist.
+    - G8.7.6. `Zone` is read-only reference data, not written by ordinary product flows.
+  - G8.8. `FLIGHT_REQUEST`.
+    - G8.8.1. `id` is the primary key; `operator_id`, `pilot_id`, `aircraft_id` and `zone_code` are FKs.
+    - G8.8.2. `window_start` is UTC; `window_end` is UTC and after `window_start`.
+    - G8.8.3. `failing_gate` holds `PILOT`, `AIRCRAFT`, `ZONE`, `TIME_WINDOW`.
+    - G8.8.4. `flight_purpose` is at most 2000 characters.
+    - G8.8.5. `state` follows the state diagram.
+    - G8.8.6. `rejection_reason` is set on rejection.
+    - G8.8.7. `rule_reference` is set alongside `failing_gate`.
+    - G8.8.8. `requested_altitude_metres`, `submitted_at`, `decided_at` and `decided_by` (reviewer identity) exist.
+  - G8.9. `REVIEW_ACTION`.
+    - G8.9.1. `id` is the primary key; `flight_request_id` is an FK.
+    - G8.9.2. `reviewer_id` comes from the `X-Reviewer-Id` header.
+    - G8.9.3. `action` holds `APPROVE`, `REJECT`.
+    - G8.9.4. `note` is required when `action=REJECT`.
+    - G8.9.5. `created_at` exists.
+  - G8.10. `AUDIT_LOG`.
+    - G8.10.1. Fields: `id` (primary key), `entity_type` (e.g. `FlightRequest`), `entity_id`, `to_state`, `actor`, `created_at`.
+    - G8.10.2. `from_state` is nullable, for creation events.
+    - G8.10.3. It has no FK drawn: it is a generic append-only log keyed by `(entity_type, entity_id)` against any entity, not a typed relation.
+  - G8.11. Creation leads to `DRAFT`. `DRAFT` → `SUBMITTED` on submit.
+  - G8.12. Automatic resolution of `SUBMITTED`.
+    - G8.12.1. `SUBMITTED` → `UNDER_REVIEW` when gates pass.
+    - G8.12.2. `SUBMITTED` → `REJECTED` when gates fail.
+  - G8.13. Reviewer decisions.
+    - G8.13.1. `UNDER_REVIEW` → `APPROVED` on approve (reviewer).
+    - G8.13.2. `UNDER_REVIEW` → `REJECTED` on reject (reviewer, note required).
+  - G8.14. `APPROVED` → `COMPLETED` on complete (maintenance endpoint only).
+  - G8.15. Cancel by the operator. [OPEN QUESTION: the "narrow window" for cancelling a `SUBMITTED` request is not defined in the documentation]
+    - G8.15.1. `DRAFT` → `CANCELLED`.
+    - G8.15.2. `SUBMITTED` → `CANCELLED` (narrow window).
+    - G8.15.3. `UNDER_REVIEW` → `CANCELLED`.
+    - G8.15.4. `APPROVED` → `CANCELLED` (up to 2h before `window_start`).
+  - G8.16. `REJECTED`, `CANCELLED` and `COMPLETED` are terminal states.
+  - G8.17. `SUBMITTED` is transient: never observed at rest, because the gates run synchronously inside submit.
+  - G8.18. `REJECTED` is terminal; `failing_gate` and `rejection_reason` (plus `rule_reference`) are populated on gate failure.
+  - G8.19. Any `(from, action)` pair not drawn is illegal and the API returns `409`, including plausible ones such as re-submitting a request already `UNDER_REVIEW`.
+  - G8.20. `submit` (`POST /flight-requests/{id}/submit`) and `validate` (`/validate`) share one pipeline. The API loads the `FlightRequest`, `Pilot`, `Aircraft` and `Zone` from Supabase and runs the pipeline.
+  - G8.21. Pipeline order and failure.
+    - G8.21.1. The gates run in order: 1. `PILOT`, 2. `AIRCRAFT`, 3. `ZONE`, 4. `TIME_WINDOW`.
+    - G8.21.2. A failing gate returns `422 {failing_gate: <gate>, rule_reference, message}` and later gates do not run.
+    - G8.21.3. If all gates pass, the pipeline passes.
+  - G8.22. For the `submit` endpoint, the API writes the state (`UNDER_REVIEW` or `REJECTED`) and an `AuditLog` entry, and responds `200/201` with the new state.
+  - G8.23. For the `validate` endpoint, the API responds `200` with per-gate results and no state change.
+  - G8.24. [OPEN QUESTION: the diagram shows the pipeline returning a `422` on the first failing gate, while `validate` responds `200` with per-gate results; how a failing gate is reported by `validate` is not stated]
+  - G8.25. [OPEN QUESTION: for `submit`, a gate failure is drawn as a `422` from the pipeline, while the state diagram shows an automatic move to `REJECTED`; the response returned to the caller on a gate failure in `submit` is not stated] [OPEN QUESTION: neither `03-api-contract.md` nor `02-state-machine.md` defines whether a failed `submit` returns `422` or a success status with state `REJECTED`]
+  - G8.26. [OPEN QUESTION: the relation of `decided_by` (reviewer identity) to `REVIEW_ACTION.reviewer_id` is not stated]
 
-**Business rules (`06-business-rules.md`, `07-clarifications.md`, `05-open-questions.md`)**
-- Verify the fixed gate order `PILOT` → `AIRCRAFT` → `ZONE` → `TIME_WINDOW`, stopping at the first failure, with `failing_gate` naming the first gate to fail only (`API-REF` §5).
-- `PILOT` gate (both conditions must hold): rating must cover the zone class (`R_BASIC` → `OPEN`; `R_ADVANCED` → `OPEN`, `CONTROLLED`; `R_BVLOS` → `OPEN`, `CONTROLLED`, `RESTRICTED`; `OH-1 §2.1`), evaluated independently of the zone gate; certification current for 18 months from `certified_on`, no grace period (one day past 18 months is not current), checked against `window_start` and not submission time (`OH-1 §2.3`); currency is never stored, computed when checked.
-- `AIRCRAFT` gate: the derived weight band must be one of the zone's `permitted_bands` (`ZC-2026.1 §2`); the check belongs to `AIRCRAFT`, not `ZONE`, despite the literal "fails the zone gate" wording of `ZC-2026.1` §2 (a corpus error, per `07-clarifications.md` item 1; implemented in `lib/gates/aircraft-gate.ts`, not `lib/gates/zone-gate.ts`); this gate is a real check, not a stub.
-- Weight bands, upper bound inclusive: `C0` 0–900 g, `C1` above 900–3,500 g, `C2` above 3,500–12,000 g, `C3` above 12,000–30,000 g; exactly 900 g is `C0`, 3,500 g is `C1`, 12,000 g is `C2`; no `C4` / `C5`; `Zone.permitted_bands` only uses `C0`–`C3` and nothing outside it is valid (`OH-1` v2.0 §3).
-- Registration of an aircraft with `mtom_grams` above 30,000 g is refused with `422` at the `/aircraft` write, before the aircraft record or any gate exists; `rule_reference` `OH-1 §3` (`API-REF` §4); no such aircraft can reach a flight request.
-- `ZONE` gate: `requested_altitude_metres` ≤ `ceiling_metres` (`ZC-2026.1 §2`, explicit); operator `authorisation_level` ≥ zone `required_authorisation_level` (`L1` < `L2` < `L3`, `OH-1 §4`, independent of pilot rating and aircraft band, confirmed by the rules owner); inactive zone fails any flight request (`ZC-2026.1 §4`, inferred, citation not fully confirmed).
-- `TIME_WINDOW` gate: lead time ≥ 6 hours between submission and `window_start` (`TSD-4 §2.1`); ≤ 60 days advance booking (`TSD-4 §2.2`, restated `OH-1` §5); duration 15–240 minutes inclusive at both ends, `window_end` strictly after `window_start` (`TSD-4 §3`); no part of the window inside the zone's curfew, evaluated minute by minute across the whole window and not only at the endpoints, curfews crossing midnight being one continuous period (`TSD-4 §4`); no overlap with another `APPROVED` or `UNDER_REVIEW` request for the same aircraft, windows touching at a boundary (one ends 14:00, next starts 14:00) not overlapping (`TSD-4 §5`).
-- Verify curfew values per zone: `KBP-CTR-3` and `ODS-CTR-5` 23:00–05:00 (`A-7` §1 narrows the `ZC-2026.1` general 22:00–06:00; `A-7` §4 states the amendment governs); `LVV-RST-2` and `ZTM-RST-7` 22:00–06:00 (`ZC-2026.1` §3, unamended); `DNI-OPN-1` and `KHR-OPN-4` none.
-- Verify the zone catalogue of six zones, all active: `KBP-CTR-3` (Kyiv Boryspil Corridor 3, `CONTROLLED`, 120 m, C0–C2, `L2`), `ODS-CTR-5` (Odesa Corridor 5, `CONTROLLED`, 90 m, C0–C2, `L2`), `LVV-RST-2` (Lviv Restricted 2, `RESTRICTED`, 60 m, C0–C1, `L3`), `ZTM-RST-7` (Zhytomyr Restricted 7, `RESTRICTED`, 45 m, C0, `L3`), `DNI-OPN-1` (Dnipro Open 1, `OPEN`, 120 m, C0–C3, `L1`), `KHR-OPN-4` (Kharkiv Open 4, `OPEN`, 120 m, C0–C3, `L1`).
-- Verify the `zone_class` pilot-rating mapping: `OPEN` accepts any rating, `CONTROLLED` requires `R_ADVANCED` or `R_BVLOS`, `RESTRICTED` requires `R_BVLOS`.
-- Verify the `rule_reference` value per condition: `OH-1 §2.1` (rating does not cover zone class), `OH-1 §2.3` (certification not current), `ZC-2026.1 §2` (weight band not permitted, `AIRCRAFT`; shared citation, disambiguated by `failing_gate`), `ZC-2026.1 §2` (altitude exceeds ceiling, `ZONE`), `OH-1 §4` (authorisation level too low), `ZC-2026.1 §4` (zone inactive), `TSD-4 §2.1` (lead time), `TSD-4 §2.2` (too far in advance), `TSD-4 §3` (duration), `A-7 §1` (curfew, `KBP-CTR-3` / `ODS-CTR-5`), `ZC-2026.1 §3` (curfew, other zones), `TSD-4 §5` (overlap), `OH-1 §3` (registration, not a gate).
-- Verify that `Aircraft.status = RETIRED` and `Pilot.status = INACTIVE` are not tied to any gate (left unwired; `05-open-questions.md` row 2, `07-clarifications.md` item 2).
-- Verify that `Operator.status = SUSPENDED` is a precondition on write operations (create, submit, approve), not a gate outcome, and is never returned as a `422` with a `failing_gate` (`07-clarifications.md` item 3).
-- Verify that values from the unadopted `CR-1` proposal and from superseded `OH-1` v1.4 (24-month currency, 4,000 g `C1`/`C2` boundary) are not used.
-- Verify that where `07-clarifications.md` conflicts with the literal wording of `06-business-rules.md`, the behaviour follows `07-clarifications.md`, and that the statuses in `05-open-questions.md` (rows 1–3 resolved, rows 4–5 open, neither blocking gate implementation) are reflected.
-- [OPEN QUESTION: `06-business-rules.md` says that where the compilation and a source document (`OH-1`, `ZC-2026.1`, `TSD-4`, `A-7`, `API-REF`) disagree, the source document governs (with the `AIRCRAFT` / `ZONE` assignment as the one stated exception); the source documents are not provided, so the rules can only be verified against the compilation]
-- [OPEN QUESTION: `05-open-questions.md` §2 says the `rule_reference` `ZC-2026.1 §4` for an inactive zone is not fully confirmed; is it the authoritative value for a `422` body]
-- [OPEN QUESTION: `06-business-rules.md` §1.4 cites `TSD-4 §4` as the source of the curfew rule, while §6 gives `A-7 §1` and `ZC-2026.1 §3` as the `rule_reference` values for a curfew failure and does not list `TSD-4 §4`; which value goes into the `422` body is stated only by §6]
-- [OPEN QUESTION: `06-business-rules.md` §1.1 cites only `OH-1 §2.1` for the rating-to-zone-class mapping, while §4 cites `ZC-2026.1 §2` and `OH-1 §2.1` for the same mapping; which citation applies]
-- [OPEN QUESTION: curfews are defined in zone-local time (`01-data-model.md` "Time handling", `06-business-rules.md` §1.4) but the documentation does not state which timezone each zone uses; it also does not say from which moment the 60-day advance-booking limit is measured (`06-business-rules.md` §1.4 says only "≤ 60 days before `window_start`"; the 6-hour lead time is stated as measured from submission)]
-
-**Frontend (`04-frontend-spec.md`)**
-- Verify the two roles and the role switcher in the header (operator / reviewer); styling is intentionally minimal and visual design is not the goal.
-- Verify operator login (`/login`) and register (`/register`) pages; registration is a single combined form (email, password and Operator profile fields such as `legal_name`, `national_id`), creates both together, logs the operator in immediately, and has no `authorisation_level` field (registration starts at `L1`).
-- Verify the operator portal requires login and manages only its own pilots, aircraft and requests (enforced server-side via the session; "the current operator" comes from the session).
-- Verify the registry pages for pilots and aircraft, each with a create form.
-- Verify the request creation form: zone picker fed from `GET /zones`, pilot and aircraft pickers scoped to the current operator, window start / end inputs, altitude input, free-text purpose field.
-- Verify that the pickers are not pre-filtered against business rules: an operator can select a combination that cannot pass; rules are enforced only at `validate` and `submit`, never while the form is being filled in.
-- Verify the "Check before submitting" button: calls `POST /flight-requests/{id}/validate` and shows a per-gate pass/fail result without changing state.
-- Verify the "My requests" list, filterable by state, and the request detail view showing rejection reason and rule reference when applicable.
-- Verify the reviewer queue: pending requests table (state = `UNDER_REVIEW`), sortable by submission time; detail view showing all four gate results (from `validate`); approve and reject actions; reject requires a note (mapped to the required `note` field of `POST /flight-requests/{id}/reject`).
-- Verify the `data-testid` contract: every interactive element carries a stable `data-testid` (for example `flight-request-submit-button`) that is not renamed unless the element changes into something else; `operator-id-input` no longer exists (not renamed, removed); `operator-login-link` and `operator-register-link` are shown when logged out; `operator-session-info` and `operator-logout-button` are shown when logged in.
-- Verify the reviewer identity is only an `X-Reviewer-Id` header typed into the header UI, not a login.
-
-**Diagrams (`08-uml-diagrams.md`)**
-- Verify that the diagrams are consistent with `01-data-model.md` and `02-state-machine.md`.
-- Verify the ER diagram relationships: Operator registers Pilot and Aircraft and owns FlightRequest; Pilot, Aircraft and Zone each relate to FlightRequest; FlightRequest is decided by ReviewAction; `AuditLog` has no FK and is keyed by `(entity_type, entity_id)`; Zone is read-only reference data.
-- Verify the state diagram: `[*]` → `DRAFT` on create, the same transitions as the table, `REJECTED` / `CANCELLED` / `COMPLETED` as final states, and the notes that `SUBMITTED` is transient and `REJECTED` is terminal with `failing_gate` + `rejection_reason` (+ `rule_reference`) on gate failure; any pair not drawn returns `409`.
-- Verify the gate-pipeline sequence: load FlightRequest, Pilot, Aircraft, Zone; run gates in order, a failing gate yields `422 {failing_gate, rule_reference, message}`; the submit endpoint writes the state (`UNDER_REVIEW` or `REJECTED`) plus an AuditLog entry; the validate endpoint returns per-gate results with no state change.
-- [OPEN QUESTION: `08-uml-diagrams.md` shows the pipeline producing a `422 {failing_gate, ...}` and then the submit endpoint writing the state (`UNDER_REVIEW` or `REJECTED`) and answering "200/201 with new state"; whether a failed submit returns `422` or a success status with state `REJECTED` is not defined in `03-api-contract.md` or `02-state-machine.md`]
 
 ## Risks
-- The documentation and migrations drift apart; the UML file drifts from the data model and state machine.
-- Pilot currency or weight band is persisted and goes stale; correcting `mtom_grams` changes the band but authorisations already issued are not revisited.
-- Curfew is converted from UTC at write time instead of at evaluation time, or evaluated only at window endpoints rather than minute by minute; curfews crossing midnight are split.
-- Boundary errors: exactly 900 / 3,500 / 12,000 / 30,000 g; exactly 15 or 240 minutes; exactly 6 hours lead time; exactly 60 days; exactly 18 months; windows touching at a boundary treated as overlapping; cancel exactly 2 hours before `window_start`.
-- Pilot currency is checked against submission time instead of `window_start`; a 24-month (superseded `OH-1` v1.4) value or the 4,000 g boundary is used.
-- Values from the unadopted `CR-1` proposal leak into the implementation.
-- The weight-band check is placed in `ZONE` (following the literal wording of `ZC-2026.1 §2`) instead of `AIRCRAFT`.
-- The shared citation `ZC-2026.1 §2` (weight band and altitude) is treated as a unique identifier instead of keying off `failing_gate`.
-- The base catalogue curfew is used for `KBP-CTR-3` / `ODS-CTR-5` instead of the `A-7` amendment.
-- `failing_gate` names a later gate, or several gates, instead of only the first one that failed.
-- `401` / `403` and `409` / `422` are mixed up; a `SUSPENDED` operator is returned as a `422` with a `failing_gate`.
-- The `Operator.status = SUSPENDED` response shape is undefined in the documentation (row 4 of `05-open-questions.md`): any status code a tester sees there is a placeholder, not a verified expectation.
-- The citation `ZC-2026.1 §4` for an inactive zone is not fully confirmed (row 5 of `05-open-questions.md`): it cannot be treated as authoritative in a `422` body.
-- `Aircraft.status = RETIRED` or `Pilot.status = INACTIVE` is wrongly tied to a gate.
-- A client-supplied `operator_id` is trusted; a reviewer header grants access to owner-only actions; `GET /flight-requests` leaks other operators' requests; the reviewer header is a static label, so any caller can supply it.
-- A transition not listed is accepted instead of returning `409`; `SUBMITTED` is observed at rest; `COMPLETED` is set from elapsed time or by a non-maintenance endpoint.
-- State writes bypass the single place in the code, or the application audit write and the database trigger disagree.
-- A request that passes `validate` fails at `submit` because another request for the same aircraft was approved in the interim (documented as expected behaviour, not a bug).
-- `validate` and `submit` diverge because gate logic is duplicated.
-- An aircraft above 30,000 g gets registered, or is refused with the wrong status or `rule_reference`.
-- An update or delete path for AuditLog or a write path for Zone is exposed in the API or the UI.
-- `data-testid` values are renamed or removed, breaking automated suites; the removed `operator-id-input` reappears.
-- Client-side eligibility filtering is added to the pickers, hiding gate failures the operator needs to see.
-- `authorisation_level` is settable during registration.
-- The `flight_purpose` limit is enforced in only one layer.
-- A `rule_reference` is lost after the original `422` response because it was not persisted (the reason `0002` exists).
-- The 16 original endpoints are renumbered, or `GET /pilots` / `GET /aircraft` are dropped when the contract is regenerated.
-- A cancellation refused closer than 2 hours before `window_start` is followed by an undefined "reviewer action" that the state machine does not allow.
+
+- R1. Data model (`01-data-model.md`).
+  - R1.1. The document and the migrations drifting apart (G1.1.4).
+  - R1.2. `Operator.id` not equal to the Supabase Auth user id (a separately generated value), or the second `user_id` column added by `0003` still present (G1.2.1).
+  - R1.3. A derived value (pilot currency, weight band) persisted and going stale (G1.10).
+  - R1.4. An update or delete path exposed for `AuditLog` (G1.1.3).
+  - R1.5. The `flight_purpose` cap enforced in only one of the API layer and the DB (G1.6.4).
+  - R1.6. `Zone` written by an ordinary product flow (G1.1.2).
+  - R1.7. The curfew converted to UTC at write time instead of at evaluation time (G1.11.2).
+  - R1.8. The rule citation of a rejected request lost after the original `422` response (G1.6.8).
+- R2. State machine (`02-state-machine.md`).
+  - R2.1. An illegal transition accepted instead of returning `409`, including a harmless-looking one such as re-submitting a request already `UNDER_REVIEW` (G2.4).
+  - R2.2. `SUBMITTED` observed at rest, because gates do not run synchronously inside submit (G2.2.2, G2.3.1).
+  - R2.3. `COMPLETED` set by elapsed time or through an endpoint other than the maintenance completion endpoint (G2.2.7, G2.3.6).
+  - R2.4. An `APPROVED` request cancelled closer than 2 hours before `window_start`, or a refused cancellation returned as something other than `409` or as a gate failure (G2.5).
+  - R2.5. A request in `DRAFT`, `REJECTED`, `CANCELLED` or `COMPLETED` counted by the overlap check, or `UNDER_REVIEW` / `APPROVED` not counted (G2.6.1, G2.6.2).
+  - R2.6. A request that passed `validate` failing at `submit` being treated as a defect instead of expected behaviour (G2.6.3).
+  - R2.7. A state write that bypasses the single place, so the transition check or the audit log write is skipped (G2.7.1).
+  - R2.8. A terminal state (`REJECTED`, `CANCELLED`, `COMPLETED`) left by any action (G2.4.1-G2.4.3).
+- R3. API contract (`03-api-contract.md`).
+  - R3.1. `operator_id` taken from a request field, a query param or a client claim instead of the session (G3.4.1, G3.8.3).
+  - R3.2. An operator reading or changing another operator's resource instead of getting `403` (G3.4.3).
+  - R3.3. `401` and `403` confused, or `409` and `422` confused (G3.13.1, G3.13.2).
+  - R3.4. `validate` changing state, or the gate logic duplicated between `submit` and `validate` so the two diverge (G3.11).
+  - R3.5. Reviewer endpoints working without `X-Reviewer-Id` instead of returning `400` (G3.12.4).
+  - R3.6. The reviewer list not unscoped, or the operator list not scoped to the session (G3.5.2, G3.5.3, G3.10.4).
+  - R3.7. `authorisation_level` settable through registration instead of always starting at `L1` (G3.6).
+  - R3.8. `rule_reference` values invented instead of taken verbatim from `docs/06-business-rules.md` §6 (G3.14.2).
+  - R3.9. A gate failure reported for a later gate instead of the first failing gate (G3.14.1, G3.15.2).
+  - R3.10. The weight-band check implemented under `ZONE` (G3.15.4).
+  - R3.11. A suspended operator's blocked request returned as a `422` with a `failing_gate` (G3.15.5).
+  - R3.12. Renumbering endpoints 1-16 when the contract is regenerated (G3.3.5).
+- R4. Frontend (`04-frontend-spec.md`).
+  - R4.1. Automated suites bind to `data-testid` values; a renamed or missing value breaks them (G4.16, G4.17).
+  - R4.2. Identity moved from a typed-in value to a session; "its own" must hold server-side, so a UI-only restriction would not be enough (G4.2, G4.4).
+  - R4.3. Pickers that filter by business rules would hide gate failures the operator needs to see (G4.18).
+  - R4.4. `authorisation_level` must not be settable via registration (G4.7).
+  - R4.5. The document records that the old "no login" statement and the `operator-id-input` element changed with operator auth; behaviour or tests based on the old model may be outdated (G4.17).
+  - R4.6. The reviewer role has no login, only a typed `X-Reviewer-Id` header (G4.3).
+  - R4.7. "Check before submitting" must not change state (G4.10).
+- R5. Canonical status of open questions (`05-open-questions.md`).
+  - R5.1. Two items remain open (G5.5, G5.6); behaviour for a suspended operator's blocked write (create, submit, approve) cannot be verified against a defined status code and body (G5.8.3).
+  - R5.2. A suspended operator's blocked request could be wrongly returned as a `422` with a `failing_gate` (G5.8.2).
+  - R5.3. A placeholder `403` could be treated as settled behaviour (G5.9.3).
+  - R5.4. The `rule_reference: "ZC-2026.1 §4"` for an inactive zone may not be authoritative (G5.10.2, G5.10.4).
+  - R5.5. `Aircraft.status = RETIRED` or `Pilot.status = INACTIVE` could be wrongly wired to a gate (G5.3).
+- R6. Business rules (`06-business-rules.md`).
+  - R6.1. The weight-band check implemented in the wrong gate (G6.8, G6.9).
+  - R6.2. The shared `ZC-2026.1 §2` citation read as a unique identifier instead of using `failing_gate` (G6.9).
+  - R6.3. Currency computed against submission time instead of `window_start`, or with a grace period, or with the superseded 24 months (G6.7, G6.24, G6.25).
+  - R6.4. Superseded or unadopted values (`OH-1` v1.4 24 months and 4,000 g boundary, `CR-1` bands, base curfew for `KBP-CTR-3`/`ODS-CTR-5`) used by mistake (G6.3, G6.23, G6.25, G6.27, G6.29).
+  - R6.5. Boundary mistakes: 900 / 3,500 / 12,000 / 30,000 g, 15 and 240 minutes, 6 hours, 60 days, touching windows, midnight-crossing curfews (G6.16-G6.20, G6.26-G6.28).
+  - R6.6. Time zone conversion errors between UTC windows and zone-local curfews (G6.21).
+  - R6.7. Stopping at the first failing gate not honoured, so `failing_gate` names a later gate (G6.4).
+  - R6.8. Aircraft above 30,000 g reaching a flight request, or being refused with a gate failure instead of a registration `422` (G6.10, G6.28).
+  - R6.9. `Aircraft.status` or `Pilot.status` wired to a gate (G6.11).
+  - R6.10. Zone `active` citation not authoritative (G6.14).
+  - R6.11. Suspended operator handling undefined (G6.35).
+- R7. Clarifications from the rules owner (`07-clarifications.md`).
+  - R7.1. Implementing the weight-band check in the zone gate instead of the aircraft gate (G7.3, G7.4).
+  - R7.2. Wiring `Aircraft.status` or `Pilot.status` to a gate by inference (G7.5).
+  - R7.3. Returning a `422` with a `failing_gate` for a suspended operator (G7.6, G7.7).
+  - R7.4. Treating the `ZC-2026.1 §4` citation for an inactive zone as confirmed (G7.11).
+  - R7.5. The wording of `07-clarifications.md` may be read as the live status although it is not updated when status changes (G7.2).
+- R8. UML diagrams (`08-uml-diagrams.md`).
+  - R8.1. A diagram drifting from `01-data-model.md`, `02-state-machine.md` or the schema (G8.2).
+  - R8.2. Mermaid syntax errors or viewer differences preventing a diagram from rendering (G8.1).
+  - R8.3. An undrawn transition being accepted instead of returning `409` (G8.19).
+  - R8.4. `SUBMITTED` observed at rest, or gates not running synchronously inside submit (G8.17).
+  - R8.5. `validate` changing state (G8.23).
+  - R8.6. Gate order not respected or later gates running after a failure (G8.21).
+  - R8.7. `COMPLETED` reachable through an endpoint other than the maintenance endpoint (G8.14).
+  - R8.8. Reject accepted without a note (G8.9.4, G8.13.2).
+- R9. Gaps and conflicts between documents.
+  - R9.1. A cancellation refused closer than 2 hours before `window_start` is followed by an undefined "reviewer action" that the state machine does not allow (G6.32.2).
+  - R9.2. The overlap check placed in a different gate than the one the tester expects, so an unexpected `failing_gate` is returned (G2.6.1).
+  - R9.3. Different status codes returned for a suspended operator in different write endpoints (G3.13.2, G3.15.5).
+  - R9.4. `validate` reports gates after the first failure although the pipeline stops at the first failure (G3.11.4).
+
 
 ## In Scope / Out Of Scope
-**In Scope:**
-- **Entities and schema:** Operator, Pilot, Aircraft, Zone, FlightRequest, ReviewAction, AuditLog with all fields, keys, constraints and enumerations listed in Goals; the four migrations; derived values (pilot currency, weight band); time handling; `flight_purpose` limit.
-- **Request lifecycle:** seven states, legal and illegal transitions, terminal states, cancellation deadline, aircraft overlap rule, single place for state writes and the audit trigger.
-- **API:** all `/api/v1` endpoints (1–16, the unnumbered authentication endpoints, `GET /pilots`, `GET /aircraft`), authentication and authorisation, owner / reviewer access rules, error statuses and the `422` body.
-- **Gate pipeline:** `PILOT`, `AIRCRAFT`, `ZONE`, `TIME_WINDOW` with every condition, threshold, citation and curfew value in `06-business-rules.md` and `07-clarifications.md`; the aircraft weight-ceiling registration rule; the zone catalogue; the weight band thresholds; the pilot currency threshold.
-- **Frontend:** operator portal (login, register, registries, request form, check before submitting, my requests, request detail), reviewer queue, role switcher, `data-testid` contract, no pre-filtering of pickers.
-- **Diagrams:** consistency of `08-uml-diagrams.md` with the data model and state machine.
-- **Open questions as test inputs:** `Operator.status = SUSPENDED` handling and the `ZC-2026.1 §4` citation are tested for what is defined and reported as gaps for what is not.
 
-**Out Of Scope:**
-- `CR-1` (Airspace Policy Group proposal, 2026-03-02): `06-business-rules.md`, top section ("Explicitly not a source"): "a proposal, not an adopted standard", nothing in it is in force.
-- `OH-1` v1.4: `06-business-rules.md`, top section: superseded, retained for audit only.
-- Raising an operator's `authorisation_level`: `03-api-contract.md` ("`authorisation_level` is no longer self-service") and `04-frontend-spec.md` ("Operator portal"), an out-of-band admin action.
-- Zone population and editing: `01-data-model.md` (Zone) and `03-api-contract.md` ("Reference data"), handed to `supabase/seed.sql` and `supabase/SETUP.md`.
-- Visual design and consumer-grade polish of the frontend: `04-frontend-spec.md`, first paragraph ("Styling is intentionally minimal", "Don't over-invest in visual design").
+### In Scope
+
+- Entities and schema: the seven entities with all fields, keys, constraints and enumerations, the four migrations, derived values, time handling and the `flight_purpose` limit (G1)
+- Request lifecycle: seven states, legal and illegal transitions, terminal states, cancellation deadline, aircraft overlap rule, single place for state writes and the audit trigger (G2)
+- API: all `/api/v1` endpoints (1-16, the unnumbered authentication endpoints, `GET /pilots`, `GET /aircraft`), authentication and authorisation, owner and reviewer access rules, error statuses and the `422` body (G3)
+- Frontend: operator portal (login, register, registries, request form, check before submitting, my requests, request detail), reviewer queue, role switcher, `data-testid` contract, no pre-filtering of pickers (G4)
+- Gate pipeline: `PILOT`, `AIRCRAFT`, `ZONE`, `TIME_WINDOW` with every condition, threshold, citation and curfew value in `06-business-rules.md` and `07-clarifications.md`; the aircraft weight-ceiling registration rule; the zone catalogue; the weight band thresholds; the pilot currency threshold (G6, G7)
+- Open questions as test inputs: `Operator.status = SUSPENDED` handling and the `ZC-2026.1 §4` citation are tested for what is defined and reported as gaps for what is not (G5)
+- Diagrams: consistency of `08-uml-diagrams.md` with the data model and state machine (G8)
+
+### Out Of Scope
+
+- `CR-1` (Airspace Policy Group proposal, 2026-03-02): `06-business-rules.md`, header ("Explicitly not a source") says it is "a proposal, not an adopted standard" and nothing in it is in force.
+- `OH-1` v1.4: `06-business-rules.md`, header, says it is superseded and retained for audit only.
+- The text of the source documents `OH-1`, `ZC-2026.1`, `A-7`, `TSD-4` and `API-REF`: `06-business-rules.md` ("Sources used") says each rule carries a citation back to the document that actually governs it. Those documents are not part of the input.
+- The document "SkyPermit — System Reference": `06-business-rules.md` ("Companion to") says it defines persisted fields, states, endpoints and response contracts, and that `06-business-rules.md` does not restate it.
+- Raising an operator's `authorisation_level`: `03-api-contract.md` ("`authorisation_level` is no longer self-service") and `04-frontend-spec.md` ("Operator portal") say it is an out-of-band admin action.
+- Zone population and editing: `01-data-model.md` (entity `Zone`) and `03-api-contract.md` ("Reference data") hand it to `supabase/seed.sql` and `supabase/SETUP.md`.
+- The full explanation of why the weight-band check belongs to `AIRCRAFT`: `03-api-contract.md` ("Gate pipeline") hands it to the "gate implementation status" section of `CLAUDE.md`.
+- Visual design and consumer-grade polish of the frontend: `04-frontend-spec.md`, first paragraph ("Styling is intentionally minimal", "Don't over-invest in visual design here").
 
 ## Entry Criteria / Environments
-Entry Criteria:
+
+### Entry Criteria
+
 1. Requirements, test goals are clear for testers
 2. All test environments and test tools are ready and can be used
 3. Test data / test documentation are available and can be used
 4. Test cases are ready and can be used
 
-Environments:
-- OS: Microsoft Windows 11 Pro (10.0.26200)
+### Environments
+
+- OS: Microsoft Windows 11 Pro (version 10.0.26200)
 - Browser: Chrome (latest version)
 
 ## Exit Criteria / Tools
-Exit Criteria:
+
+### Exit Criteria
+
 1. Test time was finished
 2. More than 85% of all test cases were passed
 3. Test Report is ready and can be provided to stakeholders
 
-Tools:
+### Tools
+
 - SVC: GitHub
 - Test design: Claude Code
-- Supabase (database, migrations, trigger, Supabase Auth)
-- REST API (`/api/v1`, JSON) and Next.js route handlers
-- Web application (Next.js frontend with `data-testid` selectors)
+- Supabase (database, migrations, trigger, `supabase/seed.sql`, Supabase Auth with session cookie), as named in the documentation
+- REST API (`/api/v1`, JSON) and Next.js route handlers, as named in the documentation
+- Web application (frontend with `data-testid` selectors), as named in the documentation
+- `X-Reviewer-Id` header
 - Mermaid (UML diagrams in `08-uml-diagrams.md`)
 
 ## Schedule and Estimations / People
-Schedule and Estimations:
-- Start date / End date: [OPEN QUESTION: start and end dates]
-- Analyses and investigation of testing scope: [OPEN QUESTION: estimation]
-- Create Test Documentation (Test Plan and Test Cases): [OPEN QUESTION: estimation]
-- Testing: [OPEN QUESTION: estimation]
-- Create Test Report: [OPEN QUESTION: estimation]
 
-People: Kamila Stopa, Senior Test Engineer
+### Schedule and Estimations
+
+- Start date: [OPEN QUESTION: not provided]
+- End date: [OPEN QUESTION: not provided]
+- Analyses and investigation of testing scope: [OPEN QUESTION: estimation not provided]
+- Create Test Documentation (Test Plan and Test Cases): [OPEN QUESTION: estimation not provided]
+- Testing: [OPEN QUESTION: estimation not provided]
+- Create Test Report: [OPEN QUESTION: estimation not provided]
+
+### People
+
+Kamila Stopa, Senior Test Engineer
