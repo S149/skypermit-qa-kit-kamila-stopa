@@ -1,6 +1,7 @@
 ---
 name: test-case-creator
 description: Generate one atomic low-level test case (one action or condition, one expected result) from the product documentation (for example ../skypermit/docs/), as a Markdown file in test-cases/. Use this skill whenever the user asks to write, create, or add a test case for a requirement, a rule, a gate, an endpoint or a feature (for example "test-case-creator login operator", or "../skypermit/docs/06-business-rules.md, G16"), even if they do not say "test-case-creator" explicitly. For a test plan use test-plan instead.
+model: sonnet
 ---
 
 # Test Case Creator
@@ -23,6 +24,19 @@ The documentation is read-only: never modify, create or delete anything in `../s
 If no matching place exists in the documentation, do not invent the behavior. Write nothing beyond what is stated, and mark the missing part as `[OPEN QUESTION: ...]`. If nothing at all matches the description, tell the user and ask whether to continue with open questions only.
 
 If the documentation describes the behavior in several places, read all of them, and when two places disagree do not pick one version: record `[OPEN QUESTION: ...]` naming both documents and both versions.
+
+## Unattended mode (called from cover-gaps)
+
+When the input is a business rule given as `gate`, `rule_reference` and `condition` (the `cover-gaps` skill passes exactly these), nobody is there to answer questions, so do not ask. The rules below replace the "ask the user" steps in this file:
+
+- **Several checks in one rule**: cover the first check the documentation lists (for example the lower boundary before the upper one) and mention the others in Open Questions as `[OPEN QUESTION: further checks not covered: ...]`.
+- **Layer**: `API`. `06-business-rules.md` §6 defines gate outcomes as a `422` with `failing_gate` and `rule_reference`, which is an API response. If the rule has no such outcome, use the Layer its documentation implies and say why in Open Questions.
+- **Role and module**: `SYS` and module `gates`, so the case is `test-cases/gates/TC-SYS-{NNN}.md`.
+- **Duplicate** (a case with the same Gate, Rule reference and Rule condition exists): create nothing and report the existing case.
+- **Revision** (the input also has `revise: <path>` and the verifier's findings): rewrite exactly that file so it agrees with the documentation passages the findings cite, keep its ID, and do not create a new file. Use this only for a file named in the input; never edit any other existing case.
+- **Anything else unclear**: write it as `[OPEN QUESTION: ...]`; never stop to ask.
+- The case must carry the three rule fields (`Gate`, `Rule reference`, `Rule condition`) copied verbatim from the input, because `scripts/uncovered-rules.mjs` matches coverage on them.
+- `07-clarifications.md` overrides `06-business-rules.md`: read both, and follow 07 where they differ.
 
 ## One check per case
 
@@ -60,6 +74,7 @@ All field names are in English, and the whole text of the case is in English.
 - **Test Data**: the concrete input values. Use only values that follow from the documentation (limits, enum values, example values it gives). If a needed value is not in the documentation, mark `[OPEN QUESTION: ...]`.
 - **Steps**: the single action under test, numbered. Keep to one action; if it cannot be said as one action, the case is not atomic.
 - **Expected Result**: one observable outcome, with the exact values the documentation gives (status code, `failing_gate`, `rule_reference`, state). Do not describe several outcomes.
+- **Gate**, **Rule reference**, **Rule condition**: only for a case that covers a business rule from `06-business-rules.md` §6. `Gate` is the `failing_gate` value (`PILOT`, `AIRCRAFT`, `ZONE`, `TIME_WINDOW`) or `REGISTRATION`; `Rule reference` is the `rule_reference` value (for example in backticks); `Rule condition` is the text of the Condition column. Copy all three exactly. For any other case, delete these three lines from the template.
 - **Status**: the life cycle of the case. `Draft` on creation; later values `Ready`, `Deprecated` are set by a person. [OPEN QUESTION: confirm the Status values]
 - **Execution Result**: `Not Run` on creation; later values `Passed`, `Failed`, `Blocked`. [OPEN QUESTION: confirm the Execution Result values]
 - **Open Questions**: every `[OPEN QUESTION: ...]` raised in the case, collected in one list. Write `None` if there are none.
@@ -92,7 +107,7 @@ Use the template `templates/test-case.md` (in this skill's directory) as the bas
 ## Open Questions
 ```
 
-A filled-in reference case is in `examples/TC-OP-013.md` (in this skill's directory). Use it to match the level of detail, the wording of Preconditions, Test Data, Steps and Expected Result, and the way gaps are marked as `[OPEN QUESTION: ...]`. Take the structure and style from it, never its values or its requirement: every fact in a new case comes from the documentation.
+A filled-in reference case is in `examples/TC-OP-013.md`, and a skeleton for a business-rule (gate) case with only placeholders and data descriptions is in `examples/TC-SYS-rule-case.md` (both in this skill's directory). Use them to match the level of detail, the wording of Preconditions, Test Data, Steps and Expected Result, and the way gaps are marked as `[OPEN QUESTION: ...]`. Take the structure and style from it, never its values or its requirement: every fact in a new case comes from the documentation.
 
 ## Verification
 
