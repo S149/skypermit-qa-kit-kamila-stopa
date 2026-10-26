@@ -2,6 +2,7 @@
 name: cover-gaps
 description: Finds SkyPermit business rules (gates) that have no test cases, generates one case per rule through test-case-creator, and verifies each case through tc-verifier. Use for requests like "close the coverage gaps", "which rules have no test cases", "cover the gaps", "uncovered rules".
 argument-hint: "[max-rules] [gate]"
+model: sonnet
 disable-model-invocation: true
 allowed-tools: Read Grep Glob Write(test-cases/**) Bash(node scripts/uncovered-rules.mjs:*) Agent(tc-verifier) Skill(test-case-creator)
 ---

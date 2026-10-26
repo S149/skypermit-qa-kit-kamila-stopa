@@ -31,7 +31,9 @@
       "Edit(../skypermit/**)",
       "Write(../skypermit/**)",
       "WebFetch",
-      "WebSearch"
+      "WebSearch",
+      "Read(./.env)",
+      "Read(./.env.*)"
     ]
   }
 }

@@ -2,6 +2,7 @@
 name: test-case-creator
 description: Generate one atomic low-level test case (one action or condition, one expected result) from the product documentation (for example ../skypermit/docs/), as a Markdown file in test-cases/. Use this skill whenever the user asks to write, create, or add a test case for a requirement, a rule, a gate, an endpoint or a feature (for example "test-case-creator login operator", or "../skypermit/docs/06-business-rules.md, G16"), even if they do not say "test-case-creator" explicitly. For a test plan use test-plan instead.
 model: sonnet
+allowed-tools: Read Glob Grep Write(test-cases/**) Edit(test-cases/**)
 ---
 
 # Test Case Creator

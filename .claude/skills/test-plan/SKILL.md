@@ -1,6 +1,8 @@
 ---
 name: test-plan
 description: Generate a complete test plan from a documentation file or directory (for example ../skypermit/docs/). Use this skill whenever the user asks for a test plan, a QA plan, or a testing plan based on product documentation, even if they do not say "test-plan" explicitly.
+model: sonnet
+allowed-tools: Read Glob Grep Write(test-plans/**) Edit(test-plans/**)
 ---
 
 # Test Plan
