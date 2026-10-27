@@ -25,11 +25,8 @@ None.
 
 ## Expected Result
 
-The login page is displayed.
-
-[OPEN QUESTION OQ-027: what the login page contains is not stated: the fields (email, password), the submit button and their `data-testid` values are not documented, so "the login page is displayed" cannot be checked by a documented element]
+The login page is displayed: the form `operator-login-form` with the fields `operator-login-email-input` and `operator-login-password-input` and the button `operator-login-submit-button`.
 
 ## Open Questions
 
-- [OPEN QUESTION OQ-027: what the login page contains is not stated: the fields (email, password), the submit button and their `data-testid` values are not documented]
 - [OPEN QUESTION OQ-028: the base URL of the application under test is not stated in the documentation; the test plan names `https://skypermit.vercel.app/` as the site]

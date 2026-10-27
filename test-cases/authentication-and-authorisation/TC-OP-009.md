@@ -25,10 +25,8 @@ None.
 
 ## Expected Result
 
-The page shows one form with the fields `email`, password, `legal_name` and `national_id` and a single submit action.
+The page shows one form (`operator-register-form`) with the fields `email` (`operator-register-email-input`), password (`operator-register-password-input`), `legal_name` (`operator-register-legal-name-input`) and `national_id` (`operator-register-national-id-input`) and a single submit action (`operator-register-submit-button`).
 
 ## Open Questions
 
-- [OPEN QUESTION OQ-015: the `data-testid` values of the register form, its fields and its submit button are not stated]
-- [OPEN QUESTION OQ-003: the full list of Operator profile fields behind "etc." on the form is not stated in `04-frontend-spec.md` (`01-data-model.md` also lists `phone`, `address_line`, `city`, `postal_code`, but does not say they are on the form)]
-- [OPEN QUESTION OQ-016: the labels of the fields and the submit button are not stated]
+None

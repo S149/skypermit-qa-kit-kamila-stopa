@@ -32,10 +32,9 @@
 
 ## Expected Result
 
-The `TIME_WINDOW` gate passes: the response does not report `failing_gate` = `TIME_WINDOW` with `rule_reference` = `TSD-4 §3`.
+The `TIME_WINDOW` gate passes: the response is `200` with `{ "ok": true }` (`public/openapi.yaml` `ValidateOk`) and does not report `failing_gate` = `TIME_WINDOW` with `rule_reference` = `TSD-4 §3`.
 
 ## Open Questions
 
 - [OPEN QUESTION OQ-038: `window_start` is not given by the documentation; any instant between 6 hours and 60 days after submission is assumed valid]
 - [OPEN QUESTION OQ-032: the documentation gives no fixed fixtures for a passing combination beyond the zone catalogue in `06-business-rules.md` §4; the concrete choice is left to the tester]
-- [OPEN QUESTION OQ-041: the status code and the body of `POST /flight-requests/{id}/validate` for a passing gate and for a failing gate are not stated (`03-api-contract.md` says it runs the gates "exactly as `submit` would" and shows "four gate results", but defines no response shape)]

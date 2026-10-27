@@ -23,7 +23,7 @@
 ## Test Data
 
 - `window_start`: exactly 6 hours after the moment `validate` is evaluated (the documented minimum lead time, "≥ 6 hours"). [OPEN QUESTION OQ-042: how a tester sets `window_start` to exactly 6 hours or exactly 60 days after the server's moment of evaluation is not stated (no clock control or tolerance is documented)]
-- `window_end`: any value giving a duration of 15-240 minutes. [OPEN QUESTION OQ-031: `window_end` is not given by the documentation; any duration of 15-240 minutes is assumed valid]
+- `window_end`: any value giving a duration of 15-240 minutes.
 - Pilot, aircraft, zone code and altitude: [OPEN QUESTION OQ-032: the documentation gives no fixed fixtures for a passing combination beyond the zone catalogue in `06-business-rules.md` §4; the concrete choice is left to the tester]
 
 ## Steps
@@ -32,11 +32,9 @@
 
 ## Expected Result
 
-The `TIME_WINDOW` gate passes: the response does not report `failing_gate` = `TIME_WINDOW` with `rule_reference` = `TSD-4 §2.1`.
+The `TIME_WINDOW` gate passes: the response is `200` with `{ "ok": true }` (`public/openapi.yaml` `ValidateOk`) and does not report `failing_gate` = `TIME_WINDOW` with `rule_reference` = `TSD-4 §2.1`.
 
 ## Open Questions
 
 - [OPEN QUESTION OQ-042: how a tester sets `window_start` to exactly 6 hours or exactly 60 days after the server's moment of evaluation is not stated (no clock control or tolerance is documented)]
-- [OPEN QUESTION OQ-031: `window_end` is not given by the documentation; any duration of 15-240 minutes is assumed valid]
 - [OPEN QUESTION OQ-032: the documentation gives no fixed fixtures for a passing combination beyond the zone catalogue in `06-business-rules.md` §4; the concrete choice is left to the tester]
-- [OPEN QUESTION OQ-041: the status code and the body of `POST /flight-requests/{id}/validate` for a passing gate and for a failing gate are not stated (`03-api-contract.md` says it runs the gates "exactly as `submit` would" and shows "four gate results", but defines no response shape)]

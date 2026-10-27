@@ -15,7 +15,7 @@
 1. The application is running.
 2. An operator is registered with a known `email` and password.
 3. The user is not logged in and the page `/login` is open.
-4. The form is filled with the email and the password of the registered operator.
+4. The form is filled with the email (`operator-login-email-input`) and the password (`operator-login-password-input`) of the registered operator.
 
 ## Test Data
 
@@ -25,15 +25,12 @@
 
 ## Steps
 
-1. Submit the login form.
+1. Submit the login form (button `operator-login-submit-button`).
 
 ## Expected Result
 
-The element with `data-testid="operator-session-info"` is shown.
+After the redirect to `/operator/pilots`, the element with `data-testid="operator-session-info"` is shown.
 
 ## Open Questions
 
 - [OPEN QUESTION OQ-004: no concrete example values for the email and password are given in the documentation]
-- [OPEN QUESTION OQ-027: the `data-testid` values of the email field, the password field and the submit button of the login form are not stated]
-- [OPEN QUESTION OQ-029: the page the user lands on after a successful login is not stated]
-- [OPEN QUESTION OQ-030: the content of `operator-session-info` (for example the email or the legal name) is not stated]

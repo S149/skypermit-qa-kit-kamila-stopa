@@ -36,4 +36,3 @@ The response has status `200` with the `Operator` object in the body and sets th
 
 - [OPEN QUESTION OQ-004: no concrete example values for the email and password are given in the documentation]
 - [OPEN QUESTION OQ-006: the name and attributes of the session cookie are not stated]
-- [OPEN QUESTION OQ-007: the fields of the operator profile returned by `GET /auth/me` are not stated]

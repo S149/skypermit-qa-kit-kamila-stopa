@@ -19,24 +19,21 @@
 ## Test Data
 
 - `email`: an address not used by any existing operator
-- password: [OPEN QUESTION OQ-001: the password rules are not stated]
-- `legal_name`: any value
-- `national_id`: a value not used by any existing operator
-- other Operator profile fields: [OPEN QUESTION OQ-003: the full list of fields on the form is not stated]
+- `password`: a string of at least 8 characters
+- `legal_name`: any non-empty string
+- `national_id`: a non-empty string not used by any existing operator
+- other Operator profile fields: `phone`, `address_line`, `city`, `postal_code` (optional, may be left empty)
 
 [OPEN QUESTION OQ-004: no concrete example values are given in the documentation]
 
 ## Steps
 
-1. Submit the register form.
+1. Submit the register form (button `operator-register-submit-button`).
 
 ## Expected Result
 
-The operator is logged in without a separate login step: `operator-session-info` and `operator-logout-button` are shown.
+The operator is logged in without a separate login step: after the redirect to `/operator/pilots`, `operator-session-info` and `operator-logout-button` are shown.
 
 ## Open Questions
 
-- [OPEN QUESTION OQ-001, OQ-003: the password rules and the full list of fields on the form are not stated]
 - [OPEN QUESTION OQ-004: no concrete example values are given in the documentation]
-- [OPEN QUESTION OQ-015: the `data-testid` of the form's submit button is not stated]
-- [OPEN QUESTION OQ-018: the page the user lands on after a successful submit is not stated]

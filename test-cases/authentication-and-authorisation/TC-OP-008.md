@@ -16,9 +16,7 @@
 
 ## Test Data
 
-Request body of `POST /api/v1/operators`: a malformed body.
-
-[OPEN QUESTION OQ-012: what the documentation counts as a "malformed request body" for `POST /operators` (invalid JSON, a missing required field, a wrong type) is not stated, and neither are the required fields and the validation rules]
+Request body of `POST /api/v1/operators`: a body that is not valid JSON.
 
 ## Steps
 
@@ -26,10 +24,8 @@ Request body of `POST /api/v1/operators`: a malformed body.
 
 ## Expected Result
 
-The response status is `400`, and the body carries validation detail.
+The response status is `400`, and the body carries validation detail: `{ "error": "Request body must be valid JSON." }`.
 
 ## Open Questions
 
-- [OPEN QUESTION OQ-012: what the documentation counts as a "malformed request body" for `POST /operators` (invalid JSON, a missing required field, a wrong type) is not stated, and neither are the required fields and the validation rules]
-- [OPEN QUESTION OQ-013: the structure of the validation detail in the `400` body is not stated]
-- [OPEN QUESTION OQ-014: whether an operator is created in any form (Auth user or profile) when the request returns `400` is not stated]
+None

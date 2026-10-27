@@ -38,4 +38,3 @@ The response reports the `TIME_WINDOW` gate as failed with `failing_gate` = `TIM
 
 - [OPEN QUESTION OQ-038: `window_start` is not given by the documentation; any instant between 6 hours and 60 days after submission is assumed valid]
 - [OPEN QUESTION OQ-032: the documentation gives no fixed fixtures for a passing combination beyond the zone catalogue in `06-business-rules.md` §4; the concrete choice is left to the tester]
-- [OPEN QUESTION OQ-041: the status code and the body of `POST /flight-requests/{id}/validate` for a passing gate and for a failing gate are not stated (`03-api-contract.md` says it runs the gates "exactly as `submit` would" and shows "four gate results", but defines no response shape)]

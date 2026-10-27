@@ -16,9 +16,7 @@
 
 ## Test Data
 
-Request body of `POST /api/v1/auth/login`: a malformed body.
-
-[OPEN QUESTION OQ-025: what the documentation counts as a "malformed request body" for `POST /auth/login` (invalid JSON, a missing email or password, a wrong type) is not stated, and neither are the required fields and the validation rules]
+Request body of `POST /api/v1/auth/login`: a body that is not valid JSON.
 
 ## Steps
 
@@ -26,10 +24,8 @@ Request body of `POST /api/v1/auth/login`: a malformed body.
 
 ## Expected Result
 
-The response status is `400`, and the body carries validation detail.
+The response status is `400`, and the body carries validation detail: `{ "error": "Request body must be valid JSON." }`.
 
 ## Open Questions
 
-- [OPEN QUESTION OQ-025: what the documentation counts as a "malformed request body" for `POST /auth/login` (invalid JSON, a missing email or password, a wrong type) is not stated, and neither are the required fields and the validation rules]
-- [OPEN QUESTION OQ-013: the structure of the validation detail in the `400` body is not stated]
-- [OPEN QUESTION OQ-026: whether `400` applies to `POST /auth/login` at all is not stated explicitly; the contract defines `400` as "Malformed request body" in general]
+None

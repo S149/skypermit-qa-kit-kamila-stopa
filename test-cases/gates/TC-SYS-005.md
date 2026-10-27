@@ -23,7 +23,7 @@
 ## Test Data
 
 - `window_start`: 5 hours 59 minutes after the moment `validate` is evaluated (one minute below the documented 6-hour minimum lead time).
-- `window_end`: any value giving a duration of 15-240 minutes. [OPEN QUESTION OQ-031: `window_end` is not given by the documentation; any duration of 15-240 minutes is assumed valid]
+- `window_end`: any value giving a duration of 15-240 minutes.
 - Pilot, aircraft, zone code and altitude: [OPEN QUESTION OQ-032: the documentation gives no fixed fixtures for a passing combination beyond the zone catalogue in `06-business-rules.md` §4; the concrete choice is left to the tester]
 
 ## Steps
@@ -36,6 +36,4 @@ The response reports the `TIME_WINDOW` gate as failed with `failing_gate` = `TIM
 
 ## Open Questions
 
-- [OPEN QUESTION OQ-031: `window_end` is not given by the documentation; any duration of 15-240 minutes is assumed valid]
 - [OPEN QUESTION OQ-032: the documentation gives no fixed fixtures for a passing combination beyond the zone catalogue in `06-business-rules.md` §4; the concrete choice is left to the tester]
-- [OPEN QUESTION OQ-041: the status code and the body of `POST /flight-requests/{id}/validate` for a passing gate and for a failing gate are not stated (`03-api-contract.md` says it runs the gates "exactly as `submit` would" and shows "four gate results", but defines no response shape)]

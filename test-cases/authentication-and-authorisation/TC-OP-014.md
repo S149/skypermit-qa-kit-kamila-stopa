@@ -21,7 +21,7 @@
 Request body of `POST /api/v1/auth/login`:
 
 - `email`: the email of the registered operator
-- password: a value different from the registered operator's password [OPEN QUESTION OQ-021: the name of the password field in the login request body is not stated]
+- `password`: a value different from the registered operator's password
 - concrete email and password values: [OPEN QUESTION OQ-004: no example values are given in the documentation]
 
 ## Steps
@@ -34,7 +34,5 @@ No session is created: the next request `GET /api/v1/auth/me` returns `401`.
 
 ## Open Questions
 
-- [OPEN QUESTION OQ-021: the name of the password field in the login request body is not stated]
 - [OPEN QUESTION OQ-004: no concrete example values for the email and password are given in the documentation]
-- [OPEN QUESTION OQ-022: the HTTP status code and body of `POST /auth/login` for wrong credentials are not stated (the contract only lists `401` as "no operator session and no `X-Reviewer-Id`")]
 - [OPEN QUESTION OQ-024: whether the response of a failed login sets any session cookie is not stated]

@@ -21,10 +21,10 @@
 Request body of `POST /api/v1/operators`:
 
 - `email`: an address not used by any existing operator
-- password: [OPEN QUESTION OQ-001: the name of the password field in the request body and the password rules are not stated]
-- `legal_name`: any value
+- `password`: a string of at least 8 characters
+- `legal_name`: any non-empty string
 - `national_id`: the same value N as the existing operator
-- `phone`, `address_line`, `city`, `postal_code`: [OPEN QUESTION OQ-002: whether these Operator fields are required in the request is not stated]
+- `phone`, `address_line`, `city`, `postal_code`: optional, may be omitted
 
 ## Steps
 
@@ -36,7 +36,4 @@ No second Operator with `national_id` = N is created; `Operator.national_id` sta
 
 ## Open Questions
 
-- [OPEN QUESTION OQ-001: the name of the password field in the request body and the password rules are not stated]
-- [OPEN QUESTION OQ-002: whether `phone`, `address_line`, `city` and `postal_code` are required in the registration request is not stated]
 - [OPEN QUESTION OQ-004: no concrete example values for the request fields are given in the documentation]
-- [OPEN QUESTION OQ-011: the HTTP status code and the response body returned for a duplicate `national_id` are not stated; also not stated is whether a Supabase Auth user for the new email is left behind when the Operator profile is not created]

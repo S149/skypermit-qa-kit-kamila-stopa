@@ -21,7 +21,7 @@
 Request body of `POST /api/v1/auth/login`:
 
 - `email`: an address not used by any existing operator
-- password: any value [OPEN QUESTION OQ-021: the name of the password field in the login request body is not stated]
+- `password`: any non-empty string
 - concrete email and password values: [OPEN QUESTION OQ-004: no example values are given in the documentation]
 
 ## Steps
@@ -34,7 +34,5 @@ No session is created: the next request `GET /api/v1/auth/me` returns `401`.
 
 ## Open Questions
 
-- [OPEN QUESTION OQ-021: the name of the password field in the login request body is not stated]
 - [OPEN QUESTION OQ-004: no concrete example values for the email and password are given in the documentation]
-- [OPEN QUESTION OQ-023: the HTTP status code and body of `POST /auth/login` for an unregistered email are not stated, and neither is whether it differs from the response for a wrong password]
 - [OPEN QUESTION OQ-024: whether the response of a failed login sets any session cookie is not stated]

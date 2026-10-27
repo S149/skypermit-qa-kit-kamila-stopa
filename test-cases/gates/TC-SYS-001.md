@@ -23,7 +23,7 @@
 ## Test Data
 
 - `window_start`: 5 hours 59 minutes after the moment of submission (one minute below the documented 6-hour minimum lead time).
-- `window_end`: [OPEN QUESTION OQ-031: the documentation does not give a concrete `window_end`; any value giving a duration of 15-240 minutes is valid]
+- `window_end`: any value giving a duration of 15-240 minutes (`06-business-rules.md` §1.4, Duration)
 - Pilot, aircraft, zone code and altitude: [OPEN QUESTION OQ-032: the documentation gives no fixed fixtures for a passing combination beyond the zone catalogue in `06-business-rules.md` §4; the concrete choice is left to the tester]
 
 ## Steps
@@ -36,6 +36,4 @@ The response is `422` with `failing_gate` = `TIME_WINDOW` and `rule_reference` =
 
 ## Open Questions
 
-- [OPEN QUESTION OQ-031: `window_end` is not given by the documentation; any duration of 15-240 minutes is valid]
 - [OPEN QUESTION OQ-032: no fixed fixtures for a passing pilot, aircraft, zone and altitude are given beyond the zone catalogue in `06-business-rules.md` §4]
-- [OPEN QUESTION OQ-033: `03-api-contract.md` says `submit` moves the request to `UNDER_REVIEW` or `REJECTED` while also defining `422` for gate failures; whether a failed `submit` returns `422` and also moves the request to `REJECTED` is not stated, so the request state after the response is not checked]
