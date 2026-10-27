@@ -29,5 +29,5 @@ The element with `data-testid="operator-register-link"` is shown.
 
 ## Open Questions
 
-- [OPEN QUESTION: which page counts as "the application" (the start page) and where the link is placed are not stated]
-- [OPEN QUESTION: the link target (whether it leads to `/register`) is not stated]
+- [OPEN QUESTION OQ-019: which page counts as "the application" (the start page) and where the link is placed are not stated]
+- [OPEN QUESTION OQ-020: the link target (whether it leads to `/register`) is not stated]

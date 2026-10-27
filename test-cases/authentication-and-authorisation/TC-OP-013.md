@@ -22,7 +22,7 @@ Request body of `POST /api/v1/auth/login`:
 
 - `email`: the email of the registered operator
 - `password`: the password of the registered operator
-- concrete email and password values: [OPEN QUESTION: no example values are given in the documentation]
+- concrete email and password values: [OPEN QUESTION OQ-004: no example values are given in the documentation]
 
 ## Steps
 
@@ -34,6 +34,6 @@ The response has status `200` with the `Operator` object in the body and sets th
 
 ## Open Questions
 
-- [OPEN QUESTION: no concrete example values for the email and password are given in the documentation]
-- [OPEN QUESTION: the name and attributes of the session cookie are not stated]
-- [OPEN QUESTION: the fields of the operator profile returned by `GET /auth/me` are not stated]
+- [OPEN QUESTION OQ-004: no concrete example values for the email and password are given in the documentation]
+- [OPEN QUESTION OQ-006: the name and attributes of the session cookie are not stated]
+- [OPEN QUESTION OQ-007: the fields of the operator profile returned by `GET /auth/me` are not stated]

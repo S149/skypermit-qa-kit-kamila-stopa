@@ -4,7 +4,7 @@ description: Finds SkyPermit business rules (gates) that have no test cases, gen
 argument-hint: "[max-rules] [gate]"
 model: sonnet
 disable-model-invocation: true
-allowed-tools: Read Grep Glob Write(test-cases/**) Bash(node scripts/uncovered-rules.mjs:*) Agent(tc-verifier) Skill(test-case-creator)
+allowed-tools: Read Grep Glob Write(test-cases/**) Edit(.notes/open-questions.md) Bash(node scripts/uncovered-rules.mjs:*) Agent(tc-verifier) Skill(test-case-creator)
 ---
 
 # cover-gaps
@@ -52,6 +52,8 @@ Never edit or overwrite an existing case.
 
 Record the path the creator reports. Success means the file exists and the format hook did not block the last write. If the hook blocks a write (exit 2, the reasons are in the message), the creator fixes and writes again; if it still fails after two fixes, or the creator reports a duplicate, or produces nothing, set `verdict: "generation_failed"`, `case_id: null`, put the reason in `note`, and go to the next rule. Never carry a failed rule into verification.
 
+If the creator reports `other_checks`, the rule has more checks than the case it just wrote. Do not drop them and do not turn them into open questions: call `test-case-creator` once more for each of them, one at a time, with the same input plus a line `check: <the check as listed>`. Each result goes through Step 3 like any other case, and gets its own entry in `results` (same `rule_reference`, its own `case_id`). The new calls report `other_checks` again only for checks not yet covered; never create two cases for the same check. Do not count these extra cases against `max-rules`.
+
 ## Step 3: verify each new case
 
 For each case created in this run, call the `tc-verifier` subagent with:
@@ -77,6 +79,14 @@ Remove only files created in this run. Never delete, rewrite or move an older ca
 
 **Verifier unavailable** (the subagent cannot be started or returns no verdict): do not verify the case yourself. Keep the file, set `verdict: "verifier_unavailable"`, `case_kept: true`, and say in `note` that it is unverified. Tell the user at the end.
 
+## Step 4: register open questions
+
+The creators already registered the questions of their own cases (the case carries `OQ-` IDs; do not register those again). After the last rule, register the rest in `.notes/open-questions.md` (format and rules are in its header): the script's questions, the verifier's silent items, and unconfirmed citations. Status `open`, Source = the case ID (or `cover-gaps` when no case is kept), Gate / rule = `<gate> <rule_reference>`. If the same question is already in the register, add this case to that row's Source and use its ID.
+
+Then clean up after removed cases: for every case removed in this run, look at the register rows whose Source is only that case. Set their Status to `dropped` and Answer to `case removed (<verdict>)`. A row that also lists other cases stays `open`; remove only the removed case from its Source.
+
+Put each question's `OQ-` ID in the `id` field of `open_questions` below, for the questions of kept cases too (read the IDs from the case's Open Questions section or from the creator's report).
+
 ## Output contract
 
 After the last rule print exactly one JSON object in a ```json block, then at most two lines of plain text (anything the user must act on, for example unverified cases). The schema is fixed; every run uses all fields:
@@ -100,7 +110,7 @@ After the last rule print exactly one JSON object in a ```json block, then at mo
     }
   ],
   "open_questions": [
-    { "gate": "ZONE", "rule_reference": "ZC-2026.1 §4", "question": "..." }
+    { "id": "OQ-001", "gate": "ZONE", "rule_reference": "ZC-2026.1 §4", "question": "..." }
   ],
   "errors": []
 }
@@ -109,7 +119,7 @@ After the last rule print exactly one JSON object in a ```json block, then at mo
 - `rules_checked`, `gaps_found`, `gaps_skipped` come from the script (`rules_checked`, `gaps_found`, `gaps_skipped`); `gaps_processed` is the number of entries in `results`.
 - `verdict` is one of `matches`, `does_not_match`, `docs_silent`, `generation_failed`, `verifier_unavailable`.
 - `case_id` and `case_path` are `null` when no case exists (generation failed, or the case was removed: then `case_id` keeps the ID that was removed and `case_path` is `null`).
-- `open_questions` merges the script's `open_questions`, silent items from the verifier, and unconfirmed citations. Each entry has `gate`, `rule_reference` (either may be `null`) and `question`.
+- `open_questions` merges the script's `open_questions`, silent items from the verifier, unconfirmed citations, and the questions of kept cases. Each entry has `id` (the `OQ-` ID from the register), `gate`, `rule_reference` (either may be `null`) and `question`.
 - `errors` lists anything that went wrong outside a single rule (script failure, hook failure) as strings; empty if none.
 
 ## Limits

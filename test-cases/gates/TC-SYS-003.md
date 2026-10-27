@@ -22,9 +22,9 @@
 
 ## Test Data
 
-- `window_start`: [OPEN QUESTION: the documentation gives no concrete value; any instant between 6 hours and 60 days after submission is valid]
+- `window_start`: [OPEN QUESTION OQ-038: the documentation gives no concrete value; any instant between 6 hours and 60 days after submission is valid]
 - `window_end`: `window_start` plus 14 minutes (one minute below the documented 15-minute minimum duration; `window_end` is after `window_start`).
-- Pilot, aircraft, zone code and altitude: [OPEN QUESTION: the documentation gives no fixed fixtures for a passing combination beyond the zone catalogue in `06-business-rules.md` §4; the concrete choice is left to the tester]
+- Pilot, aircraft, zone code and altitude: [OPEN QUESTION OQ-032: the documentation gives no fixed fixtures for a passing combination beyond the zone catalogue in `06-business-rules.md` §4; the concrete choice is left to the tester]
 
 ## Steps
 
@@ -36,7 +36,6 @@ The response is `422` with `failing_gate` = `TIME_WINDOW` and `rule_reference` =
 
 ## Open Questions
 
-- [OPEN QUESTION: `window_start` is not given by the documentation; any instant between 6 hours and 60 days after submission is valid]
-- [OPEN QUESTION: no fixed fixtures for a passing pilot, aircraft, zone and altitude are given beyond the zone catalogue in `06-business-rules.md` §4]
-- [OPEN QUESTION: `03-api-contract.md` says `submit` moves the request to `UNDER_REVIEW` or `REJECTED` while also defining `422` for gate failures; whether a failed `submit` returns `422` and also moves the request to `REJECTED` is not stated, so the request state after the response is not checked]
-- [OPEN QUESTION: further checks not covered: 241 minutes (upper boundary); `window_end` equal to or before `window_start`; the 15- and 240-minute boundaries that pass; the same rule through `POST /flight-requests/{id}/validate`]
+- [OPEN QUESTION OQ-038: `window_start` is not given by the documentation; any instant between 6 hours and 60 days after submission is valid]
+- [OPEN QUESTION OQ-032: no fixed fixtures for a passing pilot, aircraft, zone and altitude are given beyond the zone catalogue in `06-business-rules.md` §4]
+- [OPEN QUESTION OQ-033: `03-api-contract.md` says `submit` moves the request to `UNDER_REVIEW` or `REJECTED` while also defining `422` for gate failures; whether a failed `submit` returns `422` and also moves the request to `REJECTED` is not stated, so the request state after the response is not checked]

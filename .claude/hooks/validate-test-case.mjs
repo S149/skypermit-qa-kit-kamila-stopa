@@ -101,6 +101,32 @@ for (const s of sections) {
   if (!body) problems.push(`section "## ${s}" is empty (write "None" for Open Questions if there are none)`);
 }
 
+// Open questions: every marker cites registered IDs, and the Open Questions section lists every ID used in the body.
+// Register: .notes/open-questions.md (rows start with "| OQ-NNN |"). Format and rules are in its header.
+const markers = [...content.matchAll(/\[OPEN QUESTION([^:\]]*):/g)];
+if (markers.length > 0) {
+  let registered = null;
+  try {
+    registered = new Set([...fs.readFileSync(path.join(ROOT, '.notes', 'open-questions.md'), 'utf8').matchAll(/^\| (OQ-\d{3}) \|/gm)].map((m) => m[1]));
+  } catch {
+    problems.push('the case has [OPEN QUESTION] markers but .notes/open-questions.md cannot be read; register the questions there first');
+  }
+  const openAt = content.search(/^## Open Questions\s*$/m);
+  const sectionText = openAt < 0 ? '' : content.slice(openAt);
+  const bodyIds = new Set();
+  for (const m of markers) {
+    const ids = m[1].trim().match(/^OQ-\d{3}(?:, OQ-\d{3})*$/) ? m[1].trim().split(', ') : null;
+    if (!ids) { problems.push(`[OPEN QUESTION${m[1]}:] must cite register IDs: "[OPEN QUESTION OQ-007: text]" (several: "OQ-001, OQ-003")`); continue; }
+    for (const q of ids) {
+      if (registered && !registered.has(q)) problems.push(`${q} is not in .notes/open-questions.md; add the question to the register first`);
+      if (m.index < (openAt < 0 ? Infinity : openAt)) bodyIds.add(q);
+    }
+  }
+  for (const q of bodyIds) {
+    if (!new RegExp(`\\[OPEN QUESTION[^:\\]]*\\b${q}\\b[^:\\]]*:`).test(sectionText)) problems.push(`${q} is used in the case body but is not listed in "## Open Questions"`);
+  }
+}
+
 // Atomic: one action in Steps is a content judgement, but a numbered list of 4+ steps is a clear smell.
 const stepsAt = content.search(/^## Steps\s*$/m);
 const stepsBody = stepsAt < 0 ? '' : content.slice(stepsAt + 8).split(/^## /m)[0];

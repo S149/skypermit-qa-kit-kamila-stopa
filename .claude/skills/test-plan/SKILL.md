@@ -2,7 +2,7 @@
 name: test-plan
 description: Generate a complete test plan from a documentation file or directory (for example ../skypermit/docs/). Use this skill whenever the user asks for a test plan, a QA plan, or a testing plan based on product documentation, even if they do not say "test-plan" explicitly.
 model: sonnet
-allowed-tools: Read Glob Grep Write(test-plans/**) Edit(test-plans/**)
+allowed-tools: Read Glob Grep Write(test-plans/**) Edit(test-plans/**) Edit(.notes/open-questions.md)
 ---
 
 # Test Plan
@@ -64,7 +64,9 @@ If the documentation has nothing for a section that is normally filled from it, 
 
 ## Open questions
 
-Mark every gap with `[OPEN QUESTION: what needs to be clarified]`, in the place where the missing information belongs. Do not replace a gap with a plausible-sounding default.
+Mark every gap with `[OPEN QUESTION OQ-NNN: what needs to be clarified]`, in the place where the missing information belongs. Do not replace a gap with a plausible-sounding default.
+
+An open question is only a gap in the product documentation or in the project under test, never a question about this skill or the plan format. The ID comes from the register `.notes/open-questions.md` (format and rules are in its header). Register each question **when you write it into the draft**, not afterwards: read the register; if the same question is already there, reuse its ID and add this plan item to that row's Source; otherwise add a row with the next free `OQ-NNN`, Status `open`, Source = the plan ID and item number (`TP001 S2.1`), and `-` for Gate / rule. Questions that completeness steps 3 and 5 add to the plan are registered the same way, before the file is saved. When a plan is regenerated, keep the IDs of the questions that still apply and never delete a row.
 
 ## Numbering
 
@@ -91,7 +93,7 @@ Test cases are derived from this plan, so a requirement missing here is never te
 2. Match each checklist line against the draft and mark it in the checklist file as covered or not covered. A requirement counts as covered only if the plan states it in Goals, Risks or In Scope, or records it as an `[OPEN QUESTION]` (a reference to another document counts as covered only if the plan covers the referenced content or lists the reference under Out Of Scope).
 3. Add every requirement that is not covered, and fix anything in the draft that contradicts or overstates the documentation (for example, saying the documentation does not describe something that it does mention).
 4. Do not shorten the plan at the cost of dropping any checklist line.
-5. If the input is a directory with more than one document, compare the documents with each other. If the input is a single file, skip this step. Look for the same field, state, status, rule, threshold, citation or gate described differently in two places (for example one document says a field is populated only in case A, another says it is populated in case B; or one document puts a check in one gate and another in two). Do not pick one version. Record each such conflict as an `[OPEN QUESTION: ...]` placed in Goals, next to the requirement it concerns, that names both documents and both versions.
+5. If the input is a directory with more than one document, compare the documents with each other. If the input is a single file, skip this step. Look for the same field, state, status, rule, threshold, citation or gate described differently in two places (for example one document says a field is populated only in case A, another says it is populated in case B; or one document puts a check in one gate and another in two). Do not pick one version. Record each such conflict as an `[OPEN QUESTION OQ-NNN: ...]` placed in Goals, next to the requirement it concerns, that names both documents and both versions.
 6. After saving the file, read the saved plan from its first line to its last line with the Read tool, and read all the documentation files again from their first line to their last line. Do not use `limit`, do not read only a part of a file, and do not rely on what you remember from earlier in the conversation. Compare the saved plan with the documentation (not with your draft), section by section. Fix any wording that contradicts or overstates the documentation, and save again. Do not tell the user that step 6 was run unless every plan file and every documentation file was read completely in this step.
 7. Tell the user in one or two lines that steps 1-6 were run, what they added or fixed, and how many cross-document conflicts were recorded. If they added or fixed nothing, say so.
 

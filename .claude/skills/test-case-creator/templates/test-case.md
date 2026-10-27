@@ -31,4 +31,4 @@
 
 ## Open Questions
 
-{open questions, or None}
+{one line per question: - [OPEN QUESTION OQ-NNN: text], the same lines and IDs as in the body; or None}

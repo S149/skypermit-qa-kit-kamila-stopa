@@ -1,4 +1,4 @@
-# TC-OP-018: Submitting the login form shows operator-session-info
+# TC-OP-018: Submitting the login form with valid credentials shows operator-session-info
 
 - **ID:** TC-OP-018
 - **Title:** Submitting the login form with valid credentials shows operator-session-info
@@ -21,7 +21,7 @@
 
 - `email`: the email of the registered operator
 - password: the password of the registered operator
-- concrete values: [OPEN QUESTION: no example values are given in the documentation]
+- concrete values: [OPEN QUESTION OQ-004: no example values are given in the documentation]
 
 ## Steps
 
@@ -33,7 +33,7 @@ The element with `data-testid="operator-session-info"` is shown.
 
 ## Open Questions
 
-- [OPEN QUESTION: no concrete example values for the email and password are given in the documentation]
-- [OPEN QUESTION: the `data-testid` values of the email field, the password field and the submit button of the login form are not stated]
-- [OPEN QUESTION: the page the user lands on after a successful login is not stated]
-- [OPEN QUESTION: the content of `operator-session-info` (for example the email or the legal name) is not stated]
+- [OPEN QUESTION OQ-004: no concrete example values for the email and password are given in the documentation]
+- [OPEN QUESTION OQ-027: the `data-testid` values of the email field, the password field and the submit button of the login form are not stated]
+- [OPEN QUESTION OQ-029: the page the user lands on after a successful login is not stated]
+- [OPEN QUESTION OQ-030: the content of `operator-session-info` (for example the email or the legal name) is not stated]

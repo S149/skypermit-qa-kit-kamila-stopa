@@ -21,10 +21,10 @@
 Request body of `POST /api/v1/operators`:
 
 - `email`: an address not used by any existing operator
-- password: [OPEN QUESTION: the name of the password field in the request body and the password rules are not stated]
+- password: [OPEN QUESTION OQ-001: the name of the password field in the request body and the password rules are not stated]
 - `legal_name`: any value
 - `national_id`: a value not used by any existing operator
-- `phone`, `address_line`, `city`, `postal_code`: [OPEN QUESTION: whether these Operator fields are required in the request is not stated]
+- `phone`, `address_line`, `city`, `postal_code`: [OPEN QUESTION OQ-002: whether these Operator fields are required in the request is not stated]
 
 ## Steps
 
@@ -36,7 +36,7 @@ The response sets the session cookie, and the next request `GET /auth/me` with t
 
 ## Open Questions
 
-- [OPEN QUESTION: the name of the password field in the request body and the password rules are not stated]
-- [OPEN QUESTION: whether `phone`, `address_line`, `city` and `postal_code` are required in the registration request is not stated]
-- [OPEN QUESTION: no concrete example values for the request fields are given in the documentation]
-- [OPEN QUESTION: the name and attributes of the session cookie and the success HTTP status code of `POST /operators` are not stated]
+- [OPEN QUESTION OQ-001: the name of the password field in the request body and the password rules are not stated]
+- [OPEN QUESTION OQ-002: whether `phone`, `address_line`, `city` and `postal_code` are required in the registration request is not stated]
+- [OPEN QUESTION OQ-004: no concrete example values for the request fields are given in the documentation]
+- [OPEN QUESTION OQ-005, OQ-006: the name and attributes of the session cookie and the success HTTP status code of `POST /operators` are not stated]

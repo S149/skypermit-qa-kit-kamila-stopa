@@ -6,7 +6,7 @@
 - **Type:** Negative
 - **Layer:** API
 - **Priority:** High
-- **Requirement:** `06-business-rules.md` <§ of the rule>; <TPxxx item, or [OPEN QUESTION: no matching numbered test-plan item]>
+- **Requirement:** `06-business-rules.md` <§ of the rule>; <TPxxx item, or [OPEN QUESTION OQ-NNN: no matching numbered test-plan item]>
 - **Gate:** <failing_gate value from 06 §6>
 - **Rule reference:** `<rule_reference value from 06 §6>`
 - **Rule condition:** <Condition column from 06 §6, verbatim>
@@ -22,7 +22,7 @@
 ## Test Data
 
 - <field the rule depends on>: <a value that breaks the condition, derived from the limit in the documentation, for example "one unit beyond the documented limit">
-- <other required field>: [OPEN QUESTION: <what the documentation does not give, for example a concrete valid value>]
+- <other required field>: [OPEN QUESTION OQ-NNN: <what the documentation does not give, for example a concrete valid value>]
 
 ## Steps
 
@@ -34,4 +34,4 @@ The response is `<status code the documentation gives for gate failures>` with `
 
 ## Open Questions
 
-- [OPEN QUESTION: <each gap, one per line, as in the body>]
+- [OPEN QUESTION OQ-NNN: <each gap, one per line, as in the body>]

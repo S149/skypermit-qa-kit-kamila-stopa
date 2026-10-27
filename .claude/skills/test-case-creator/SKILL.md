@@ -2,7 +2,7 @@
 name: test-case-creator
 description: Generate one atomic low-level test case (one action or condition, one expected result) from the product documentation (for example ../skypermit/docs/), as a Markdown file in test-cases/. Use this skill whenever the user asks to write, create, or add a test case for a requirement, a rule, a gate, an endpoint or a feature (for example "test-case-creator login operator", or "../skypermit/docs/06-business-rules.md, G16"), even if they do not say "test-case-creator" explicitly. For a test plan use test-plan instead.
 model: sonnet
-allowed-tools: Read Glob Grep Write(test-cases/**) Edit(test-cases/**)
+allowed-tools: Read Glob Grep Write(test-cases/**) Edit(test-cases/**) Edit(.notes/open-questions.md)
 ---
 
 # Test Case Creator
@@ -22,20 +22,21 @@ If no input was given, ask the user for it before doing anything else.
 
 The documentation is read-only: never modify, create or delete anything in `../skypermit`.
 
-If no matching place exists in the documentation, do not invent the behavior. Write nothing beyond what is stated, and mark the missing part as `[OPEN QUESTION: ...]`. If nothing at all matches the description, tell the user and ask whether to continue with open questions only.
+If no matching place exists in the documentation, do not invent the behavior. Write nothing beyond what is stated, and mark the missing part as `[OPEN QUESTION OQ-NNN: ...]`. If nothing at all matches the description, tell the user and ask whether to continue with open questions only.
 
-If the documentation describes the behavior in several places, read all of them, and when two places disagree do not pick one version: record `[OPEN QUESTION: ...]` naming both documents and both versions.
+If the documentation describes the behavior in several places, read all of them, and when two places disagree do not pick one version: record `[OPEN QUESTION OQ-NNN: ...]` naming both documents and both versions.
 
 ## Unattended mode (called from cover-gaps)
 
 When the input is a business rule given as `gate`, `rule_reference` and `condition` (the `cover-gaps` skill passes exactly these), nobody is there to answer questions, so do not ask. The rules below replace the "ask the user" steps in this file:
 
-- **Several checks in one rule**: cover the first check the documentation lists (for example the lower boundary before the upper one) and mention the others in Open Questions as `[OPEN QUESTION: further checks not covered: ...]`.
+- **Several checks in one rule**: cover the first check the documentation lists (for example the lower boundary before the upper one), or the one named in a `check:` line of the input. List every other check of the rule (each boundary on the failing and on the passing side, and the same rule through `validate` as well as `submit`) in a final line `other_checks: [...]`. These are not open questions: `cover-gaps` creates one case for each of them, passing it back as `check:`. Never write them into the case.
 - **Layer**: `API`. `06-business-rules.md` §6 defines gate outcomes as a `422` with `failing_gate` and `rule_reference`, which is an API response. If the rule has no such outcome, use the Layer its documentation implies and say why in Open Questions.
 - **Role and module**: `SYS` and module `gates`, so the case is `test-cases/gates/TC-SYS-{NNN}.md`.
-- **Duplicate** (a case with the same Gate, Rule reference and Rule condition exists): create nothing and report the existing case.
+- **Duplicate** (a case with the same Gate, Rule reference, Rule condition **and the same check** exists): create nothing and report the existing case. Several cases may share the three rule fields when they cover different checks of the rule.
 - **Revision** (the input also has `revise: <path>` and the verifier's findings): rewrite exactly that file so it agrees with the documentation passages the findings cite, keep its ID, and do not create a new file. Use this only for a file named in the input; never edit any other existing case.
-- **Anything else unclear**: write it as `[OPEN QUESTION: ...]`; never stop to ask.
+- **Anything else unclear**: write it as `[OPEN QUESTION OQ-NNN: ...]`; never stop to ask.
+- **Register**: register your questions yourself, as described in "Open questions" below. `cover-gaps` runs rules one at a time, so there is no collision. After the path, report the `OQ-` IDs of the case.
 - The case must carry the three rule fields (`Gate`, `Rule reference`, `Rule condition`) copied verbatim from the input, because `scripts/uncovered-rules.mjs` matches coverage on them.
 - `07-clarifications.md` overrides `06-business-rules.md`: read both, and follow 07 where they differ.
 
@@ -72,17 +73,28 @@ All field names are in English, and the whole text of the case is in English.
   - Low: format-only and cosmetic checks, UI details.
 - **Requirement**: file, section and test-plan item, for example `06-business-rules.md §1.2 PILOT; TP007 G16`. Look up the test-plan item in `test-plans/` and cite the deepest numbered item that matches (`TP003 G1.2`, not just `TP003 G1`). If the plan has no matching item, or the matching item has no number, write `[OPEN QUESTION: no matching numbered test-plan item]` instead of inventing one. Never invent a section or an item.
 - **Preconditions**: the state that must exist before the action (accounts, entities, statuses, time). Setup lives here, so that Steps stay a single action.
-- **Test Data**: the concrete input values. Use only values that follow from the documentation (limits, enum values, example values it gives). If a needed value is not in the documentation, mark `[OPEN QUESTION: ...]`.
+- **Test Data**: the concrete input values. Use only values that follow from the documentation (limits, enum values, example values it gives). If a needed value is not in the documentation, mark `[OPEN QUESTION OQ-NNN: ...]`.
 - **Steps**: the single action under test, numbered. Keep to one action; if it cannot be said as one action, the case is not atomic.
 - **Expected Result**: one observable outcome, with the exact values the documentation gives (status code, `failing_gate`, `rule_reference`, state). Do not describe several outcomes.
 - **Gate**, **Rule reference**, **Rule condition**: only for a case that covers a business rule from `06-business-rules.md` §6. `Gate` is the `failing_gate` value (`PILOT`, `AIRCRAFT`, `ZONE`, `TIME_WINDOW`) or `REGISTRATION`; `Rule reference` is the `rule_reference` value (for example in backticks); `Rule condition` is the text of the Condition column. Copy all three exactly. For any other case, delete these three lines from the template.
-- **Status**: the life cycle of the case. `Draft` on creation; later values `Ready`, `Deprecated` are set by a person. [OPEN QUESTION: confirm the Status values]
-- **Execution Result**: `Not Run` on creation; later values `Passed`, `Failed`, `Blocked`. [OPEN QUESTION: confirm the Execution Result values]
-- **Open Questions**: every `[OPEN QUESTION: ...]` raised in the case, collected in one list. Write `None` if there are none.
+- **Status**: the life cycle of the case. `Draft` on creation; later values `Ready`, `Deprecated` are set by a person.
+- **Execution Result**: `Not Run` on creation; later values `Passed`, `Failed`, `Blocked`.
+- **Open Questions**: every `[OPEN QUESTION OQ-NNN: ...]` raised in the case, collected in one list (same text, same IDs as in the body). Write `None` if there are none.
 
 ## Open questions
 
-Mark every gap with `[OPEN QUESTION: what needs to be clarified]`, in the place where the missing information belongs (and repeat it in the Open Questions field). Do not replace a gap with a plausible default. A case with open questions is still saved; it is the visible gap that matters.
+Mark every gap with `[OPEN QUESTION OQ-NNN: what needs to be clarified]`, in the place where the missing information belongs (and repeat it in the Open Questions field). Do not replace a gap with a plausible default. A case with open questions is still saved; it is the visible gap that matters.
+
+An open question is only a gap in the product documentation or in the project under test. Never raise one about this skill, the template, the hook or the case format itself.
+
+The ID comes from the register `.notes/open-questions.md` (format and rules are in its header), and the register is filled **before** the case is written, in every mode (manual, unattended, `revise`):
+
+1. Decide the questions of the case, and the case ID and Gate / rule.
+2. Read the register. For each question: if the same question is already there, reuse its ID and add this case to that row's Source. Otherwise add a row with the next free `OQ-NNN`, Status `open`, Source = the case ID, and Gate / rule if the case has them.
+3. Write the case with the IDs in the markers. The hook `validate-test-case.mjs` blocks the write if a marker has no ID, an ID is not in the register, or an ID used in the body is missing from the Open Questions section.
+4. In `revise` mode keep the rows of the case, and add rows only for questions that are new.
+
+Never change or delete an existing row, except adding to its Source. If a case ends with fewer questions than it registered, leave the extra rows alone and mention their IDs to the user.
 
 ## Output
 
@@ -108,7 +120,7 @@ Use the template `templates/test-case.md` (in this skill's directory) as the bas
 ## Open Questions
 ```
 
-A filled-in reference case is in `examples/TC-OP-013.md`, and a skeleton for a business-rule (gate) case with only placeholders and data descriptions is in `examples/TC-SYS-rule-case.md` (both in this skill's directory). Use them to match the level of detail, the wording of Preconditions, Test Data, Steps and Expected Result, and the way gaps are marked as `[OPEN QUESTION: ...]`. Take the structure and style from it, never its values or its requirement: every fact in a new case comes from the documentation.
+A filled-in reference case is in `examples/TC-OP-013.md`, and a skeleton for a business-rule (gate) case with only placeholders and data descriptions is in `examples/TC-SYS-rule-case.md` (both in this skill's directory). Use them to match the level of detail, the wording of Preconditions, Test Data, Steps and Expected Result, and the way gaps are marked as `[OPEN QUESTION OQ-NNN: ...]` (`OQ-NNN` is a placeholder in the examples; a real case cites real IDs from the register). Take the structure and style from it, never its values or its requirement: every fact in a new case comes from the documentation.
 
 ## Verification
 
@@ -116,4 +128,4 @@ After saving the file, read the saved case from its first line to its last line 
 
 Do not tell the user that the verification was run unless the saved case and the source documentation were both read completely in this step.
 
-Then tell the user in one or two lines: the ID and the path, what the verification fixed (or that it fixed nothing), and how many open questions the case has.
+Then tell the user in one or two lines: the ID and the path, what the verification fixed (or that it fixed nothing), and how many open questions the case has (with their `OQ-` IDs from the register).

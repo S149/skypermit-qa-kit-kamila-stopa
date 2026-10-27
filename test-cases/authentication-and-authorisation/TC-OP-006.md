@@ -21,10 +21,10 @@
 Request body of `POST /api/v1/operators`:
 
 - `email`: the same address E as the existing operator
-- password: [OPEN QUESTION: the name of the password field in the request body and the password rules are not stated]
+- password: [OPEN QUESTION OQ-001: the name of the password field in the request body and the password rules are not stated]
 - `legal_name`: any value
 - `national_id`: a value not used by any existing operator
-- `phone`, `address_line`, `city`, `postal_code`: [OPEN QUESTION: whether these Operator fields are required in the request is not stated]
+- `phone`, `address_line`, `city`, `postal_code`: [OPEN QUESTION OQ-002: whether these Operator fields are required in the request is not stated]
 
 ## Steps
 
@@ -36,7 +36,7 @@ No second Operator with `email` = E is created; `Operator.email` stays unique.
 
 ## Open Questions
 
-- [OPEN QUESTION: the name of the password field in the request body and the password rules are not stated]
-- [OPEN QUESTION: whether `phone`, `address_line`, `city` and `postal_code` are required in the registration request is not stated]
-- [OPEN QUESTION: no concrete example values for the request fields are given in the documentation]
-- [OPEN QUESTION: the HTTP status code and the response body returned for a duplicate email are not stated (`04-frontend-spec.md` and TP005 G5 also leave duplicate registration handling open)]
+- [OPEN QUESTION OQ-001: the name of the password field in the request body and the password rules are not stated]
+- [OPEN QUESTION OQ-002: whether `phone`, `address_line`, `city` and `postal_code` are required in the registration request is not stated]
+- [OPEN QUESTION OQ-004: no concrete example values for the request fields are given in the documentation]
+- [OPEN QUESTION OQ-010: the HTTP status code and the response body returned for a duplicate email are not stated (`04-frontend-spec.md` and TP005 G5 also leave duplicate registration handling open)]

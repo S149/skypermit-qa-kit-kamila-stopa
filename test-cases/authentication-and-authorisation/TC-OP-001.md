@@ -20,13 +20,13 @@
 Request body of `POST /api/v1/operators` (one combined request: auth credentials plus Operator profile fields):
 
 - `email`: an address not used by any existing operator
-- password: [OPEN QUESTION: the name of the password field in the request body and the password rules are not stated]
+- password: [OPEN QUESTION OQ-001: the name of the password field in the request body and the password rules are not stated]
 - `legal_name`: any value
 - `national_id`: a value not used by any existing operator
-- `phone`, `address_line`, `city`, `postal_code`: [OPEN QUESTION: whether these Operator fields (listed in `01-data-model.md`) are required or optional in the request is not stated; `04-frontend-spec.md` lists only `legal_name`, `national_id` "etc."]
+- `phone`, `address_line`, `city`, `postal_code`: [OPEN QUESTION OQ-002: whether these Operator fields (listed in `01-data-model.md`) are required or optional in the request is not stated; `04-frontend-spec.md` lists only `legal_name`, `national_id` "etc."]
 - `authorisation_level`: not sent (it is not a field of the registration form; `03-api-contract.md` does not list the request body fields)
 
-[OPEN QUESTION: no concrete example values for these fields are given in the documentation]
+[OPEN QUESTION OQ-004: no concrete example values for these fields are given in the documentation]
 
 ## Steps
 
@@ -38,8 +38,8 @@ The new operator exists with `authorisation_level` = `L1` (least privilege). The
 
 ## Open Questions
 
-- [OPEN QUESTION: the name of the password field in the request body and the password rules are not stated]
-- [OPEN QUESTION: whether `phone`, `address_line`, `city` and `postal_code` are required in the registration request is not stated]
-- [OPEN QUESTION: no concrete example values for the request fields are given in the documentation]
-- [OPEN QUESTION: the success HTTP status code and the response body of `POST /operators` are not stated, so it is not stated whether `authorisation_level` is returned in the response itself]
-- [OPEN QUESTION: whether the operator profile returned by `GET /auth/me` includes `authorisation_level` is not stated ("The logged-in operator's profile"); if it does not, the value has to be read another way, for example `GET /operators/{id}` (self) or the database]
+- [OPEN QUESTION OQ-001: the name of the password field in the request body and the password rules are not stated]
+- [OPEN QUESTION OQ-002: whether `phone`, `address_line`, `city` and `postal_code` are required in the registration request is not stated]
+- [OPEN QUESTION OQ-004: no concrete example values for the request fields are given in the documentation]
+- [OPEN QUESTION OQ-005: the success HTTP status code and the response body of `POST /operators` are not stated, so it is not stated whether `authorisation_level` is returned in the response itself]
+- [OPEN QUESTION OQ-007: whether the operator profile returned by `GET /auth/me` includes `authorisation_level` is not stated ("The logged-in operator's profile"); if it does not, the value has to be read another way, for example `GET /operators/{id}` (self) or the database]

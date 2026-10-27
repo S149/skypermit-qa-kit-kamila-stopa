@@ -29,5 +29,5 @@ The form has no input for `authorisation_level`.
 
 ## Open Questions
 
-- [OPEN QUESTION: the `data-testid` values of the register form and its fields are not stated, so the absence of the field cannot be checked by a documented selector]
-- [OPEN QUESTION: what counts as such an input (any label or control that names the authorisation level) is not stated]
+- [OPEN QUESTION OQ-015: the `data-testid` values of the register form and its fields are not stated, so the absence of the field cannot be checked by a documented selector]
+- [OPEN QUESTION OQ-017: what counts as such an input (any label or control that names the authorisation level) is not stated]
