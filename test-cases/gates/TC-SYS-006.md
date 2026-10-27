@@ -1,0 +1,43 @@
+# TC-SYS-006: Validating a request whose window starts exactly 60 days away passes the TIME_WINDOW advance-booking check
+
+- **ID:** TC-SYS-006
+- **Title:** Validating a request whose window starts exactly 60 days away passes the TIME_WINDOW advance-booking check
+- **Module:** gates
+- **Type:** Positive
+- **Layer:** API
+- **Priority:** High
+- **Requirement:** `06-business-rules.md` §1.4, §6; `03-api-contract.md` Endpoint 13 (`validate`); TP007 G17
+- **Gate:** TIME_WINDOW
+- **Rule reference:** `TSD-4 §2.2`
+- **Rule condition:** Booked too far in advance
+- **Status:** Draft
+- **Execution Result:** Not Run
+
+## Preconditions
+
+1. The application is running and the flight-request endpoint is reachable.
+2. An operator is signed in and owns a flight request in `DRAFT`.
+3. The request references a pilot, an aircraft and a zone for which the `PILOT`, `AIRCRAFT` and `ZONE` gates all pass (a pilot whose rating covers the zone class and whose certification is current at `window_start`, an aircraft whose weight band is permitted by the zone, an operator whose authorisation level is at least the zone's required level, and an altitude within the zone's ceiling), so that `TIME_WINDOW` is the first gate to fail.
+4. The window duration is within 15-240 minutes, the window does not fall inside the zone's curfew, and it does not overlap another `APPROVED` or `UNDER_REVIEW` request for the same aircraft, so that advance booking is the only condition under test and no other condition of any gate fails.
+
+## Test Data
+
+- `window_start`: exactly 60 days after the moment `validate` is evaluated (the documented maximum advance booking, "≤ 60 days"). [OPEN QUESTION OQ-042: how a tester sets `window_start` to exactly 6 hours or exactly 60 days after the server's moment of evaluation is not stated (no clock control or tolerance is documented)] [OPEN QUESTION OQ-037: the moment the 60-day limit is measured from is not stated; submission time is assumed]
+- `window_end`: any value giving a duration of 15-240 minutes. [OPEN QUESTION OQ-031: `window_end` is not given by the documentation; any duration of 15-240 minutes is assumed valid]
+- Pilot, aircraft, zone code and altitude: [OPEN QUESTION OQ-032: the documentation gives no fixed fixtures for a passing combination beyond the zone catalogue in `06-business-rules.md` §4; the concrete choice is left to the tester]
+
+## Steps
+
+1. Send `POST /flight-requests/{id}/validate` for the request described above.
+
+## Expected Result
+
+The `TIME_WINDOW` gate passes: the response does not report `failing_gate` = `TIME_WINDOW` with `rule_reference` = `TSD-4 §2.2`.
+
+## Open Questions
+
+- [OPEN QUESTION OQ-042: how a tester sets `window_start` to exactly 6 hours or exactly 60 days after the server's moment of evaluation is not stated (no clock control or tolerance is documented)]
+- [OPEN QUESTION OQ-037: the moment the 60-day limit is measured from is not stated; submission time is assumed]
+- [OPEN QUESTION OQ-031: `window_end` is not given by the documentation; any duration of 15-240 minutes is assumed valid]
+- [OPEN QUESTION OQ-032: the documentation gives no fixed fixtures for a passing combination beyond the zone catalogue in `06-business-rules.md` §4; the concrete choice is left to the tester]
+- [OPEN QUESTION OQ-041: the status code and the body of `POST /flight-requests/{id}/validate` for a passing gate and for a failing gate are not stated (`03-api-contract.md` says it runs the gates "exactly as `submit` would" and shows "four gate results", but defines no response shape)]
